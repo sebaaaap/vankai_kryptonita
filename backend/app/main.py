@@ -1,0 +1,53 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from app.core.config import settings
+from app.api import pos, inventory, purchases, sessions, products, locations, suppliers, categories, reports, customers, auth, users
+import os
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version="1.0.0",
+    description="Sistema POS Híbrido - Local y Web"
+)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción, especificar dominios
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Servir archivos estáticos (imágenes de productos)
+UPLOAD_DIR = "uploads"
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+# Registrar Routers
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(pos.router, prefix="/api/v1/pos", tags=["Point of Sale"])
+app.include_router(inventory.router, prefix="/api/v1/inventory", tags=["Inventory"])
+app.include_router(purchases.router, prefix="/api/v1/purchases", tags=["Purchases"])
+app.include_router(customers.router, prefix="/api/v1/customers", tags=["Customers"])
+app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["Cash Sessions"])
+app.include_router(products.router, prefix="/api/v1/products", tags=["Products"])
+app.include_router(locations.router, prefix="/api/v1/locations", tags=["Locations"])
+app.include_router(suppliers.router, prefix="/api/v1/suppliers", tags=["Suppliers"])
+app.include_router(categories.router, prefix="/api/v1/categories", tags=["Categories"])
+app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
+
+@app.get("/")
+def root():
+    return {
+        "status": "online",
+        "mode": settings.DEPLOYMENT_MODE,
+        "database": "SQLite (Local)" if "sqlite" in settings.DATABASE_URL else "PostgreSQL (VPS)"
+    }
+
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok"}
