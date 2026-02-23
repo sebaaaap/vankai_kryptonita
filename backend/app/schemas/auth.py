@@ -1,3 +1,4 @@
+from uuid import UUID
 from typing import Optional
 from pydantic import BaseModel
 from enum import Enum
@@ -28,7 +29,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 class UserResponse(UserBase):
-    id: int
+    id: UUID
     
     class Config:
         from_attributes = True

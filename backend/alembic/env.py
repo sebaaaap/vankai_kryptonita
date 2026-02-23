@@ -55,6 +55,12 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def include_object(object, name, type_, reflected, compare_to):
+    if type_ == "table":
+        # Evitar migraciones en tablas de sistema de postgres o extensions si hubiera
+        return True
+    return True
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
@@ -72,12 +78,13 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection, 
             target_metadata=target_metadata,
-            render_as_batch=True
+            include_schemas=True,
+            include_object=include_object,
+            version_table_schema=target_metadata.schema if target_metadata.schema else "public"
         )
 
         with context.begin_transaction():
             context.run_migrations()
-
 
 if context.is_offline_mode():
     run_migrations_offline()

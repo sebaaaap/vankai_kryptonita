@@ -1,7 +1,9 @@
+from uuid import UUID
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 from enum import Enum
+from decimal import Decimal
 
 class VehicleType(str, Enum):
     automovil = "automovil"
@@ -21,7 +23,7 @@ class VehicleBase(BaseModel):
     vin: Optional[str] = None
 
 class VehicleCreate(VehicleBase):
-    customer_id: Optional[int] = None
+    customer_id: Optional[UUID] = None
 
 class VehicleUpdate(BaseModel):
     license_plate: Optional[str] = None
@@ -33,8 +35,8 @@ class VehicleUpdate(BaseModel):
     vin: Optional[str] = None
 
 class VehicleResponse(VehicleBase):
-    id: int
-    customer_id: int
+    id: UUID
+    customer_id: UUID
     
     class Config:
         from_attributes = True
@@ -57,17 +59,17 @@ class CustomerUpdate(BaseModel):
     email: Optional[str] = None
 
 class CustomerResponse(CustomerBase):
-    id: int
+    id: UUID
     vehicles: List[VehicleResponse] = []
     
     class Config:
         from_attributes = True
 
 class CustomerSalesHistory(BaseModel):
-    id: int
+    id: UUID
     name: str
     rut: str
-    total_spent: float
+    total_spent: Decimal
     tickets_count: int
     last_sale_date: Optional[datetime]
     

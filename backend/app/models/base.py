@@ -1,10 +1,20 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Boolean, Enum, Text
-from sqlalchemy.orm import relationship, declarative_base
-import sqlalchemy.orm as sqlalchemy_orm
-from datetime import datetime
+import uuid
 import enum
+from datetime import datetime
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean, Enum, Text, Numeric
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.sql import func
+import sqlalchemy.orm as sqlalchemy_orm
 
 Base = declarative_base()
+
+class BaseModel(Base):
+    __abstract__ = True
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 class MovementType(enum.Enum):
     IN_PURCHASE = "entrada_compra"
@@ -26,12 +36,11 @@ class PurchaseState(enum.Enum):
     CANCELLED = "cancelado"
 
 class SaleState(enum.Enum):
-    """Estado de la venta siguiendo el flujo de Odoo"""
-    DRAFT = "borrador"           # Carrito activo, no validado
-    VALIDATED = "validado"       # Venta confirmada, inventario ajustado
-    PAID = "pagado"             # Totalmente pagada
-    REFUNDED = "reembolsado"    # Reembolsada (nota de crédito)
-    CANCELLED = "cancelado"     # Cancelada sin afectar inventario
+    DRAFT = "borrador"
+    VALIDATED = "validado"
+    PAID = "pagado"
+    REFUNDED = "reembolsado"
+    CANCELLED = "cancelado"
 
 class PaymentMethod(enum.Enum):
     CASH = "efectivo"
@@ -40,102 +49,84 @@ class PaymentMethod(enum.Enum):
     MIXED = "mixto"
 
 class RefundReason(enum.Enum):
-    """Razón del reembolso para trazabilidad"""
-    RETURN_TO_STOCK = "devolucion_stock"      # Producto regresa al inventario
-    DAMAGED = "producto_danado"                # Producto dañado (merma)
-    CUSTOMER_ERROR = "error_cliente"           # Error del cliente
-    SYSTEM_ERROR = "error_sistema"             # Error del sistema
+    RETURN_TO_STOCK = "devolucion_stock"
+    DAMAGED = "producto_danado"
+    CUSTOMER_ERROR = "error_cliente"
+    SYSTEM_ERROR = "error_sistema"
 
-class StorageLocation(Base):
+class StorageLocation(BaseModel):
     __tablename__ = "storage_locations"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False) # Ej: A-01-L1
+    name = Column(String, nullable=False)
+    zone = Column(String, nullable=True)
+    side = Column(String, nullable=True)
+    column = Column(Integer, nullable=True)
+    level = Column(Integer, nullable=True)
     
-    # Atributos de Matriz de Coordenadas
-    zone = Column(String, nullable=True)     # Ej: Pasillo A
-    side = Column(String, nullable=True)     # L (Left/Izquierdo) o R (Right/Derecho)
-    column = Column(Integer, nullable=True)  # Número de estante
-    level = Column(Integer, nullable=True)   # Nivel 1-7
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("storage_locations.id"), nullable=True)
+    path = Column(String, index=True)
+    allows_multiple_products = Column(Boolean, default=True, nullable=False)
     
-    parent_id = Column(Integer, ForeignKey("storage_locations.id"), nullable=True)
-    path = Column(String, index=True) # "Pasillo A/01/L1"
-    allows_multiple_products = Column(Boolean, default=True, nullable=False) # Flag para permitir múltiples SKU o no
-    
-    # Relación recursiva
-    children = relationship("StorageLocation", backref=sqlalchemy_orm.backref("parent", remote_side=[id]))
+    children = relationship("StorageLocation", backref=sqlalchemy_orm.backref("parent", remote_side="StorageLocation.id"))
     products = relationship("Product", back_populates="location")
 
-class ProductCategory(Base):
+class ProductCategory(BaseModel):
     __tablename__ = "product_categories"
-    id = Column(Integer, primary_key=True, index=True)
+    
     name = Column(String, unique=True, nullable=False)
-    color = Column(String, nullable=True) # Código Hexadecimal para la UI
-    parent_id = Column(Integer, ForeignKey("product_categories.id"), nullable=True)
+    color = Column(String, nullable=True)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("product_categories.id"), nullable=True)
     
     products = relationship("Product", back_populates="category_rel")
 
-class Product(Base):
+class Product(BaseModel):
     __tablename__ = "products"
 
-    id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True, nullable=False)
-    internal_reference = Column(String, index=True, nullable=True) # Referencia interna técnica
-    barcode = Column(String, index=True, nullable=False)
-    price = Column(Float, nullable=False) # Precio Venta
-    cost = Column(Float, nullable=False)  # Costo
+    internal_reference = Column(String, index=True, nullable=True) # sku
+    barcode = Column(String, index=True, nullable=False) # codigo_barra
+    price = Column(Numeric(12, 2), nullable=False) 
+    cost = Column(Numeric(12, 2), nullable=False)  
     
-    # Unidad de Medida (UoM)
-    uom = Column(String, default="unidades") # unidades, kg, L, etc.
+    uom = Column(String, default="unidades")
     
     product_type = Column(Enum(ProductType), default=ProductType.STORABLE)
-    location_id = Column(Integer, ForeignKey("storage_locations.id"), nullable=True)
+    location_id = Column(UUID(as_uuid=True), ForeignKey("storage_locations.id"), nullable=True)
     
-    category_id = Column(Integer, ForeignKey("product_categories.id"), nullable=True)
-    category = Column(String, index=True, nullable=True) # Mantenemos por compatibilidad o lo migramos
+    category_id = Column(UUID(as_uuid=True), ForeignKey("product_categories.id"), nullable=True)
+    category = Column(String, index=True, nullable=True)
     
-    stock_quantity = Column(Float, default=0, nullable=False) # Cambiamos a Float para Kg/L
-    min_stock = Column(Float, default=5, nullable=False)
+    stock_quantity = Column(Numeric(12, 2), default=0, nullable=False) 
+    min_stock = Column(Numeric(12, 2), default=5, nullable=False)
     image_path = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
 
     location = relationship("StorageLocation", back_populates="products")
     category_rel = relationship("ProductCategory", back_populates="products")
-    
     movement_items = relationship("InventoryMovementItem", back_populates="product")
     sale_items = relationship("SaleItem", back_populates="product")
     purchase_items = relationship("PurchaseItem", back_populates="product")
 
-class CashSession(Base):
-    """
-    Sesión de Caja - Concepto clave de Odoo
-    Los movimientos de inventario NO son definitivos hasta que la venta se valida
-    """
+class CashSession(BaseModel):
     __tablename__ = "cash_sessions"
     
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)  # Ej: "Sesión 2026-02-07 - Cajero Juan"
-    start_time = Column(DateTime, default=datetime.utcnow, nullable=False)
-    end_time = Column(DateTime, nullable=True)
+    name = Column(String, nullable=False)
+    start_time = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    end_time = Column(DateTime(timezone=True), nullable=True)
     
-    # Control de efectivo
-    initial_cash = Column(Float, default=0.0, nullable=False)
-    final_cash = Column(Float, nullable=True)  # Lo que cuenta el cajero al cerrar
-    expected_cash = Column(Float, default=0.0)  # Lo que debería haber según el sistema
+    initial_cash = Column(Numeric(12, 2), default=0.0, nullable=False)
+    final_cash = Column(Numeric(12, 2), nullable=True)
+    expected_cash = Column(Numeric(12, 2), default=0.0)
     
-    # Totales por método de pago
-    total_sales_cash = Column(Float, default=0.0)
-    total_sales_card = Column(Float, default=0.0)
-    total_sales_transfer = Column(Float, default=0.0)
-    
-    # Diferencia (discrepancia)
-    difference = Column(Float, default=0.0)  # final_cash - expected_cash
+    total_sales_cash = Column(Numeric(12, 2), default=0.0)
+    total_sales_card = Column(Numeric(12, 2), default=0.0)
+    total_sales_transfer = Column(Numeric(12, 2), default=0.0)
+    difference = Column(Numeric(12, 2), default=0.0)
     
     user_id = Column(String, nullable=True)
     is_open = Column(Boolean, default=True, nullable=False)
-    notes = Column(Text, nullable=True)  # Observaciones del cierre
+    notes = Column(Text, nullable=True)
     
-    # Relaciones
     tickets = relationship("Ticket", back_populates="session")
 
 class VehicleType(enum.Enum):
@@ -146,11 +137,11 @@ class VehicleType(enum.Enum):
     camioneta = "camioneta"
     otro = "otro"
 
-class Customer(Base):
+class Customer(BaseModel):
     __tablename__ = "customers"
-    id = Column(Integer, primary_key=True, index=True)
+    
     name = Column(String, index=True, nullable=False)
-    rut = Column(String, unique=True, index=True, nullable=False) # Rol Único Tributario (Chile)
+    rut = Column(String, unique=True, index=True, nullable=False) # rut_cliente
     address = Column(String, nullable=True)
     phone = Column(String, nullable=True)
     email = Column(String, nullable=True)
@@ -158,174 +149,147 @@ class Customer(Base):
     vehicles = relationship("Vehicle", back_populates="owner", cascade="all, delete-orphan")
     tickets = relationship("Ticket", back_populates="customer")
 
-class Vehicle(Base):
+class Vehicle(BaseModel):
     __tablename__ = "vehicles"
-    id = Column(Integer, primary_key=True, index=True)
-    license_plate = Column(String, unique=True, index=True, nullable=False) # Patente
+    
+    license_plate = Column(String, unique=True, index=True, nullable=False)
     brand = Column(String, nullable=True)
     model = Column(String, nullable=True)
     year = Column(Integer, nullable=True)
     vehicle_type = Column(Enum(VehicleType), default=VehicleType.automovil)
     color = Column(String, nullable=True)
-    vin = Column(String, nullable=True) # Vehicle Identification Number
+    vin = Column(String, nullable=True)
     
-    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False)
     owner = relationship("Customer", back_populates="vehicles")
     tickets = relationship("Ticket", back_populates="vehicle")
 
-class Ticket(Base):
-    """
-    Ticket/Venta - Representa una transacción de venta
-    Sigue el flujo: DRAFT -> VALIDATED -> PAID
-    """
+class Ticket(BaseModel):
     __tablename__ = "tickets"
     
-    id = Column(Integer, primary_key=True, index=True)
-    ticket_number = Column(String, unique=True, index=True, nullable=False)  # Ej: "T-2026-0001"
-    date_created = Column(DateTime, default=datetime.utcnow, nullable=False)
-    date_validated = Column(DateTime, nullable=True)  # Cuando se confirma la venta
+    ticket_number = Column(String, unique=True, index=True, nullable=False)
+    date_created = Column(DateTime(timezone=True), default=func.now(), nullable=False, index=True) # fecha_venta
+    date_validated = Column(DateTime(timezone=True), nullable=True)
     
-    # Estado de la venta
     state = Column(Enum(SaleState), default=SaleState.DRAFT, nullable=False)
     
-    # Totales
-    subtotal = Column(Float, default=0.0)
-    tax_amount = Column(Float, default=0.0)  # IVA 19%
-    total_amount = Column(Float, default=0.0)
+    subtotal = Column(Numeric(12, 2), default=0.0)
+    tax_amount = Column(Numeric(12, 2), default=0.0)
+    total_amount = Column(Numeric(12, 2), default=0.0)
     
-    # Método de pago principal (para compatibilidad)
     payment_method = Column(String, default="CASH")
     
-    # Relación con sesión
-    session_id = Column(Integer, ForeignKey("cash_sessions.id"), nullable=True, index=True)
+    session_id = Column(UUID(as_uuid=True), ForeignKey("cash_sessions.id"), nullable=True, index=True)
     session = relationship("CashSession", back_populates="tickets")
     
-    # Relación con cliente y vehículo
-    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
-    vehicle_id = Column(Integer, ForeignKey("vehicles.id"), nullable=True, index=True)
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=True, index=True)
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id"), nullable=True, index=True)
     
     customer = relationship("Customer", back_populates="tickets")
     vehicle = relationship("Vehicle", back_populates="tickets")
     
-    # Reembolsos
     is_refunded = Column(Boolean, default=False)
-    refund_ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=True)  # Nota de crédito vinculada
-    original_ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=True)  # Venta original
+    refund_ticket_id = Column(UUID(as_uuid=True), ForeignKey("tickets.id"), nullable=True)
+    original_ticket_id = Column(UUID(as_uuid=True), ForeignKey("tickets.id"), nullable=True)
     refund_reason = Column(Enum(RefundReason), nullable=True)
     return_to_stock = Column(Boolean, default=True)
     
-    # Relaciones
     items = relationship("SaleItem", back_populates="ticket", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="ticket", cascade="all, delete-orphan")
 
-class SaleItem(Base):
-    """Item de venta - Línea de producto en un ticket"""
+class SaleItem(BaseModel):
     __tablename__ = "sale_items"
     
-    id = Column(Integer, primary_key=True, index=True)
-    ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    ticket_id = Column(UUID(as_uuid=True), ForeignKey("tickets.id"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
     
-    quantity = Column(Float, nullable=False)  # Float para soportar kg, litros
-    unit_price = Column(Float, nullable=False)
-    discount_percent = Column(Float, default=0.0)  # Descuento en %
-    subtotal = Column(Float, nullable=False)
+    quantity = Column(Numeric(12, 2), nullable=False)
+    unit_price = Column(Numeric(12, 2), nullable=False)
+    discount_percent = Column(Numeric(12, 2), default=0.0)
+    subtotal = Column(Numeric(12, 2), nullable=False)
     
-    # Relaciones
     ticket = relationship("Ticket", back_populates="items")
     product = relationship("Product", back_populates="sale_items")
 
-class Payment(Base):
-    """
-    Pagos - Soporta pagos divididos (Split Payments)
-    Una venta puede tener múltiples pagos
-    """
+    @property
+    def price(self):
+        return self.unit_price
+
+class Payment(BaseModel):
     __tablename__ = "payments"
     
-    id = Column(Integer, primary_key=True, index=True)
-    ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=False)
+    ticket_id = Column(UUID(as_uuid=True), ForeignKey("tickets.id"), nullable=False)
     
     payment_method = Column(Enum(PaymentMethod), nullable=False)
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)
     
-    # Información adicional
-    reference = Column(String, nullable=True)  # Número de transacción, voucher, etc.
-    date_created = Column(DateTime, default=datetime.utcnow, nullable=False)
+    reference = Column(String, nullable=True)
+    date_created = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     
-    # Relaciones
     ticket = relationship("Ticket", back_populates="payments")
 
-class Supplier(Base):
+class Supplier(BaseModel):
     __tablename__ = "suppliers"
-    id = Column(Integer, primary_key=True, index=True)
+    
     name = Column(String, index=True, nullable=False)
-    tax_id = Column(String, index=True, nullable=True) # RUT/NIT
+    tax_id = Column(String, index=True, nullable=True)
     address = Column(String, nullable=True)
     phone = Column(String, nullable=True)
     email = Column(String, nullable=True)
     
     purchases = relationship("Purchase", back_populates="supplier")
 
-class Purchase(Base):
+class Purchase(BaseModel):
     __tablename__ = "purchases"
-    id = Column(Integer, primary_key=True, index=True)
-    date_created = Column(DateTime, default=datetime.utcnow)
     
-    # Relación con proveedor
-    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
+    date_created = Column(DateTime(timezone=True), default=func.now())
+    
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=True)
     supplier = relationship("Supplier", back_populates="purchases")
     
-    # Estado de la compra (similar a Odoo)
     state = Column(Enum(PurchaseState), default=PurchaseState.DRAFT, nullable=False)
     
     invoice_number = Column(String, nullable=True)
-    subtotal_net = Column(Float, default=0.0)
-    tax_amount = Column(Float, default=0.0) # IVA 19%
-    total_cost = Column(Float, default=0.0)
-    notes = Column(String, nullable=True)  # Observaciones
+    subtotal_net = Column(Numeric(12, 2), default=0.0)
+    tax_amount = Column(Numeric(12, 2), default=0.0)
+    total_cost = Column(Numeric(12, 2), default=0.0)
+    notes = Column(String, nullable=True)
     items = relationship("PurchaseItem", back_populates="purchase")
 
-class PurchaseItem(Base):
+class PurchaseItem(BaseModel):
     __tablename__ = "purchase_items"
-    id = Column(Integer, primary_key=True, index=True)
-    purchase_id = Column(Integer, ForeignKey("purchases.id"))
-    product_id = Column(Integer, ForeignKey("products.id"))
-    quantity = Column(Float, nullable=False)
-    unit_cost = Column(Float, nullable=False)
+    
+    purchase_id = Column(UUID(as_uuid=True), ForeignKey("purchases.id"))
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
+    quantity = Column(Numeric(12, 2), nullable=False)
+    unit_cost = Column(Numeric(12, 2), nullable=False)
+    
     purchase = relationship("Purchase", back_populates="items")
     product = relationship("Product", back_populates="purchase_items")
 
-class InventoryMovement(Base):
-    """
-    Movimientos de Inventario - Trazabilidad total (Inventory Logs)
-    Cada movimiento queda registrado para auditoría
-    """
+class InventoryMovement(BaseModel):
     __tablename__ = "inventory_movements"
     
-    id = Column(Integer, primary_key=True, index=True)
-    date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    date = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     type = Column(Enum(MovementType), nullable=False)
     reason = Column(String, nullable=True)
     
-    # Referencia al documento origen
-    ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=True)
-    purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=True)
+    ticket_id = Column(UUID(as_uuid=True), ForeignKey("tickets.id"), nullable=True)
+    purchase_id = Column(UUID(as_uuid=True), ForeignKey("purchases.id"), nullable=True)
     
     user_id = Column(String, nullable=True)
     
     items = relationship("InventoryMovementItem", back_populates="movement", cascade="all, delete-orphan")
 
-class InventoryMovementItem(Base):
-    """Item de movimiento de inventario"""
+class InventoryMovementItem(BaseModel):
     __tablename__ = "inventory_movement_items"
     
-    id = Column(Integer, primary_key=True, index=True)
-    movement_id = Column(Integer, ForeignKey("inventory_movements.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    movement_id = Column(UUID(as_uuid=True), ForeignKey("inventory_movements.id"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
     
-    quantity = Column(Float, nullable=False)  # Positivo para entrada, negativo para salida
-    stock_before = Column(Float, nullable=False)  # Stock antes del movimiento
-    stock_after = Column(Float, nullable=False)   # Stock después del movimiento
+    quantity = Column(Numeric(12, 2), nullable=False)
+    stock_before = Column(Numeric(12, 2), nullable=False)
+    stock_after = Column(Numeric(12, 2), nullable=False)
     
     movement = relationship("InventoryMovement", back_populates="items")
     product = relationship("Product", back_populates="movement_items")
@@ -339,10 +303,9 @@ class UserRole(enum.Enum):
     vendedor = "vendedor"
     inventario = "inventario"
 
-class User(Base):
+class User(BaseModel):
     __tablename__ = "users"
     
-    id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=True)
     phone = Column(String, nullable=True)
@@ -350,5 +313,3 @@ class User(Base):
     full_name = Column(String, nullable=True)
     role = Column(Enum(UserRole), default=UserRole.vendedor, nullable=False)
     is_active = Column(Boolean, default=True)
-
-import sqlalchemy.orm

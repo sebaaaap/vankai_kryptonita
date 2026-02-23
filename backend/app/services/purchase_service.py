@@ -4,6 +4,8 @@ from app.schemas.purchases import PurchaseCreate, PurchaseUpdate
 from app.schemas.inventory import InventoryMovementCreate, InventoryMovementItemCreate
 from app.services.inventory_service import InventoryService
 from fastapi import HTTPException
+from decimal import Decimal
+from app.core.utils import round_decimal
 
 class PurchaseService:
     def __init__(self, db: Session):
@@ -39,7 +41,7 @@ class PurchaseService:
         self.db.add(purchase)
         self.db.flush()
 
-        calculated_net = 0.0
+        calculated_net = Decimal('0.00')
 
         # Crear items de compra
         for item in data.items:
@@ -56,7 +58,10 @@ class PurchaseService:
             if item.unit_cost < 0:
                 raise HTTPException(status_code=400, detail=f"El costo unitario no puede ser negativo")
 
-            subtotal = item.quantity * item.unit_cost
+            item_qty = Decimal(str(item.quantity))
+            item_cost = Decimal(str(item.unit_cost))
+            
+            subtotal = round_decimal(item_qty * item_cost)
             
             purchase_item = PurchaseItem(
                 purchase_id=purchase.id,
@@ -67,9 +72,9 @@ class PurchaseService:
             self.db.add(purchase_item)
             calculated_net += subtotal
 
-        purchase.subtotal_net = calculated_net
-        purchase.tax_amount = calculated_net * 0.19 # IVA 19% Chile
-        purchase.total_cost = purchase.subtotal_net + purchase.tax_amount
+        purchase.subtotal_net = round_decimal(calculated_net)
+        purchase.tax_amount = round_decimal(purchase.subtotal_net * Decimal('0.19')) # IVA 19% Chile
+        purchase.total_cost = round_decimal(purchase.subtotal_net + purchase.tax_amount)
         
         try:
             self.db.commit()

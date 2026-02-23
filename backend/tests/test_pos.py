@@ -87,13 +87,13 @@ def _quick_sale_payload(producto, session, cantidad: float = 1) -> dict:
     Y valida que payments.sum == total_calculado.
     Por tanto: total_amount en el payload DEBE ser price * qty * 1.19
     """
-    neto = producto.price * cantidad
-    total_con_iva = neto * 1.19  # el backend agrega IVA encima del precio
+    neto = float(producto.price) * float(cantidad)
+    total_con_iva = float(neto) * 1.19  # el backend agrega IVA encima del precio
     return {
-        "items": [{"product_id": producto.id, "quantity": cantidad, "price": producto.price}],
+        "items": [{"product_id": str(producto.id), "quantity": cantidad, "price": float(producto.price)}],
         "payment_method": "efectivo",
         "total_amount": total_con_iva,  # ← debe incluir IVA para que cuadre con el cálculo interno
-        "session_id": session.id,
+        "session_id": str(session.id),
     }
 
 

@@ -1,41 +1,43 @@
+from uuid import UUID
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
+from decimal import Decimal
 
 class PurchaseItemCreate(BaseModel):
-    product_id: int
+    product_id: UUID
     quantity: int
-    unit_cost: float
+    unit_cost: Decimal
 
 class PurchaseItemResponse(BaseModel):
-    id: int
-    product_id: int
+    id: UUID
+    product_id: UUID
     quantity: int
-    unit_cost: float
-    subtotal: float
+    unit_cost: Decimal
+    subtotal: Decimal
     
     class Config:
         from_attributes = True
 
 class PurchaseCreate(BaseModel):
-    supplier_id: Optional[int] = None
+    supplier_id: Optional[UUID] = None
     invoice_number: Optional[str] = None
     notes: Optional[str] = None
     items: List[PurchaseItemCreate]
 
 class PurchaseUpdate(BaseModel):
-    supplier_id: Optional[int] = None
+    supplier_id: Optional[UUID] = None
     invoice_number: Optional[str] = None
     notes: Optional[str] = None
 
 class PurchaseResponse(BaseModel):
-    id: int
+    id: UUID
     date_created: datetime
-    supplier_id: Optional[int]
+    supplier_id: Optional[UUID]
     invoice_number: Optional[str]
-    subtotal_net: float
-    tax_amount: float
-    total_cost: float
+    subtotal_net: Decimal
+    tax_amount: Decimal
+    total_cost: Decimal
     state: str
     notes: Optional[str]
     items: List[PurchaseItemResponse] = []

@@ -1,6 +1,7 @@
+from uuid import UUID
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
-from app.db.session import get_db
+from app.database import get_db_session
 from app.services.image_service import ImageService
 from app.models.base import Product, StorageLocation
 from app.schemas.locations import ProductResponseWithLocation
@@ -21,9 +22,9 @@ class ProductCreate(BaseModel):
     stock_quantity: float = 0
     min_stock: float = 5
     image_path: Optional[str] = None
-    category_id: Optional[int] = None
+    category_id: Optional[UUID] = None
     product_type: str = "STORABLE"
-    location_id: Optional[int] = None
+    location_id: Optional[UUID] = None
 
 @router.post("/upload-image")
 def upload_product_image(
@@ -36,7 +37,7 @@ def upload_product_image(
 @router.post("/", response_model=ProductResponseWithLocation)
 def create_product(
     product: ProductCreate, 
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin"]))
 ):
     # Validar location si viene
@@ -74,29 +75,29 @@ from sqlalchemy.orm import joinedload
 from collections import defaultdict
 
 class ProductLocationDetail(BaseModel):
-    id: int # ID del registro específico (para operaciones puntuales)
-    location_id: int
+    id: UUID # ID del registro específico (para operaciones puntuales)
+    location_id: UUID
     location_path: str
     stock: float
 
 class ProductAggregatedResponse(BaseModel):
-    id: int # ID representativo (el primero encontrado)
+    id: UUID # ID representativo (el primero encontrado)
     name: str
     barcode: str
     price: float
     cost: float
     total_stock: float
-    category_id: Optional[int]
+    category_id: Optional[UUID]
     product_type: str
     uom: str
     internal_reference: Optional[str]
     locations: List[ProductLocationDetail]
-    location_id: Optional[int] = None # ID de la ubicación principal (primera encontrada)
+    location_id: Optional[UUID] = None # ID de la ubicación principal (primera encontrada)
     image_path: Optional[str] = None
 
 @router.get("/", response_model=List[ProductAggregatedResponse])
 def list_products(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin", "inventario", "vendedor"]))
 ):
     """
@@ -157,9 +158,9 @@ def list_products(
 
 @router.put("/{product_id}", response_model=ProductResponseWithLocation)
 def update_product(
-    product_id: int, 
+    product_id: UUID, 
     product_data: ProductCreate, 
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin"]))
 ):
     """
@@ -227,8 +228,8 @@ def update_product(
 
 @router.delete("/{product_id}")
 def delete_product(
-    product_id: int, 
-    db: Session = Depends(get_db),
+    product_id: UUID, 
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin"]))
 ):
     """

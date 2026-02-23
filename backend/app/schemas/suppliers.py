@@ -1,3 +1,4 @@
+from uuid import UUID
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -12,7 +13,7 @@ class SupplierCreate(SupplierBase):
     pass
 
 class SupplierResponse(SupplierBase):
-    id: int
+    id: UUID
 
     class Config:
         from_attributes = True

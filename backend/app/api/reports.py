@@ -1,9 +1,11 @@
+from decimal import Decimal
+from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, desc, extract
 from typing import List, Optional
 from datetime import datetime, timedelta
-from app.db.session import get_db
+from app.database import get_db_session
 from app.models.base import (
     Product, ProductCategory, StorageLocation, 
     Ticket, SaleItem, SaleState, Payment, PaymentMethod,
@@ -19,7 +21,7 @@ router = APIRouter()
 def get_sales_summary(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db_session)
 ):
     if not start_date:
         start_date = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -34,7 +36,7 @@ def get_sales_summary(
     )
 
     # 1. Gross Sales
-    gross_sales = query.with_entities(func.sum(Ticket.total_amount)).scalar() or 0.0
+    gross_sales = query.with_entities(func.sum(Ticket.total_amount)).scalar() or Decimal('0.00')
 
     # 2. Avg Ticket
     total_tickets = query.count()
@@ -46,7 +48,7 @@ def get_sales_summary(
         Ticket.date_created <= end_date,
         Ticket.state == SaleState.VALIDATED,
         Payment.payment_method.in_([PaymentMethod.CARD, PaymentMethod.TRANSFER])
-    ).scalar() or 0.0
+    ).scalar() or Decimal('0.00')
 
     # 4. Sales by Hour
     # Extract hour from date_created
@@ -70,7 +72,7 @@ def get_sales_summary(
         chart_data.append({"hour": label, "ventas": sales_by_hour.get(label, 0)})
 
     # 5. Recent Transactions
-    transactions = query.order_by(desc(Ticket.date_created)).limit(10).all()
+    transactions = query.order_by(desc(Ticket.created_at)).limit(10).all()
     trans_list = []
     for t in transactions:
         # Determine main method
@@ -107,7 +109,7 @@ def get_sales_summary(
 def get_profitability(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db_session)
 ):
     # Calculates margin based on Product Cost vs Sale Price at the moment of sale
     # Ideally TicketItem has cost snapshot. If not, we use current product cost (less accurate but acceptable for simple POS)
@@ -219,7 +221,7 @@ def get_profitability(
     }
 
 @router.get("/sales/cash_reports")
-def get_cash_reports(db: Session = Depends(get_db)):
+def get_cash_reports(db: Session = Depends(get_db_session)):
     # Summary of recent cash sessions
     sessions_db = db.query(CashSession).order_by(desc(CashSession.start_time)).limit(10).all()
     
@@ -259,7 +261,7 @@ def get_cash_reports(db: Session = Depends(get_db)):
 def get_inventory_summary(
     aisle: Optional[str] = None,
     category: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db_session)
 ):
     # Query Products
     q = db.query(Product).filter(Product.is_active == True)
@@ -332,7 +334,7 @@ def get_inventory_summary(
 def get_purchases_summary(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db_session)
 ):
     if not start_date:
         start_date = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)

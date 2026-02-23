@@ -1,8 +1,9 @@
+from uuid import UUID
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
-from app.db.session import get_db
+from app.database import get_db_session
 from app.models.base import User, UserRole
 from app.schemas.auth import UserCreate, UserUpdate, UserResponse
 from app.core import security
@@ -11,7 +12,7 @@ router = APIRouter()
 
 @router.get("/", response_model=List[UserResponse])
 def get_users(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user)
 ):
     if current_user.role != UserRole.admin:
@@ -21,7 +22,7 @@ def get_users(
 @router.post("/", response_model=UserResponse)
 def create_user(
     *,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     user_in: UserCreate,
     current_user: User = Depends(get_current_user)
 ):
@@ -60,8 +61,8 @@ def create_user(
 @router.put("/{user_id}", response_model=UserResponse)
 def update_user(
     *,
-    db: Session = Depends(get_db),
-    user_id: int,
+    db: Session = Depends(get_db_session),
+    user_id: UUID,
     user_in: UserUpdate,
     current_user: User = Depends(get_current_user)
 ):
@@ -89,8 +90,8 @@ def update_user(
 @router.delete("/{user_id}", response_model=UserResponse)
 def delete_user(
     *,
-    db: Session = Depends(get_db),
-    user_id: int,
+    db: Session = Depends(get_db_session),
+    user_id: UUID,
     current_user: User = Depends(get_current_user)
 ):
     if current_user.role != UserRole.admin:

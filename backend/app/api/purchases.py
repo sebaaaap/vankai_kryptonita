@@ -1,6 +1,7 @@
+from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from app.db.session import get_db
+from app.database import get_db_session
 from app.schemas.purchases import PurchaseCreate, PurchaseResponse, PurchaseUpdate, PurchaseItemResponse
 from app.services.purchase_service import PurchaseService
 from app.api.deps import check_roles
@@ -11,7 +12,7 @@ router = APIRouter()
 @router.post("/", response_model=PurchaseResponse)
 def create_purchase(
     data: PurchaseCreate, 
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin", "inventario"]))
 ):
     """
@@ -48,7 +49,7 @@ def create_purchase(
 @router.get("/", response_model=List[PurchaseResponse])
 def list_purchases(
     state: Optional[str] = Query(None, description="Filtrar por estado: DRAFT, CONFIRMED, CANCELLED"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin", "inventario"]))
 ):
     """
@@ -86,8 +87,8 @@ def list_purchases(
 
 @router.get("/{purchase_id}", response_model=PurchaseResponse)
 def get_purchase(
-    purchase_id: int, 
-    db: Session = Depends(get_db),
+    purchase_id: UUID, 
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin", "inventario"]))
 ):
     """
@@ -121,8 +122,8 @@ def get_purchase(
 
 @router.post("/{purchase_id}/confirm", response_model=PurchaseResponse)
 def confirm_purchase(
-    purchase_id: int, 
-    db: Session = Depends(get_db),
+    purchase_id: UUID, 
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin"]))
 ):
     """
@@ -160,8 +161,8 @@ def confirm_purchase(
 
 @router.post("/{purchase_id}/cancel", response_model=PurchaseResponse)
 def cancel_purchase(
-    purchase_id: int, 
-    db: Session = Depends(get_db),
+    purchase_id: UUID, 
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin"]))
 ):
     """
@@ -195,9 +196,9 @@ def cancel_purchase(
 
 @router.patch("/{purchase_id}", response_model=PurchaseResponse)
 def update_purchase(
-    purchase_id: int, 
+    purchase_id: UUID, 
     data: PurchaseUpdate, 
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin", "inventario"]))
 ):
     """

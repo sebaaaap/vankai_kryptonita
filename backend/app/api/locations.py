@@ -1,6 +1,7 @@
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.db.session import get_db
+from app.database import get_db_session
 from app.services.location_service import LocationService
 from app.services.inventory_service import InventoryService
 from typing import List
@@ -10,7 +11,7 @@ from app.schemas.locations import LocationCreate, LocationResponse, AisleGenerat
 router = APIRouter()
 
 @router.post("/", response_model=LocationResponse)
-def create_location(data: LocationCreate, db: Session = Depends(get_db)):
+def create_location(data: LocationCreate, db: Session = Depends(get_db_session)):
     service = LocationService(db)
     return service.create_location(data)
 
@@ -19,7 +20,7 @@ from app.schemas.inventory import InventoryMovementItemCreate, InventoryMovement
 @router.post("/mermas/restore", response_model=InventoryMovementResponse)
 def restore_mermas_product(
     item: InventoryMovementItemCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db_session)
 ):
     """
     Restaura un producto del Pasillo Mermas al Pasillo Stock.
@@ -30,17 +31,17 @@ def restore_mermas_product(
 
 
 @router.post("/generate", response_model=List[LocationResponse])
-def generate_aisle(data: AisleGenerate, db: Session = Depends(get_db)):
+def generate_aisle(data: AisleGenerate, db: Session = Depends(get_db_session)):
     service = LocationService(db)
     return service.generate_aisle(data.zone_prefix, data.num_columns, data.num_levels)
 
 @router.get("/tree", response_model=List[LocationResponse])
-def get_location_tree(db: Session = Depends(get_db)):
+def get_location_tree(db: Session = Depends(get_db_session)):
     service = LocationService(db)
     return service.get_tree()
 
 @router.get("/available", response_model=List[LocationResponse])
-def get_available_locations(db: Session = Depends(get_db)):
+def get_available_locations(db: Session = Depends(get_db_session)):
     """
     Devuelve las ubicaciones que pueden recibir productos:
     1. Que NO sean "Pasillo Mermas" (se gestiona vía Operaciones).
@@ -73,7 +74,7 @@ def get_available_locations(db: Session = Depends(get_db)):
     return available
 
 @router.get("/{location_id}/products")
-def get_products_in_location(location_id: int, db: Session = Depends(get_db)):
+def get_products_in_location(location_id: UUID, db: Session = Depends(get_db_session)):
     """
     Devuelve los productos asignados a una ubicación específica
     """
@@ -98,10 +99,10 @@ def get_products_in_location(location_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/{location_id}/products/{product_id}")
 def delete_product_from_location(
-    location_id: int, 
-    product_id: int, 
+    location_id: UUID, 
+    product_id: UUID, 
     quantity: float = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db_session)
 ):
     """
     Elimina un producto de una ubicación (Stock Disposal / Merma)
@@ -155,6 +156,6 @@ def delete_product_from_location(
     return s_inventory.create_movement(movement_data)
 
 @router.delete("/{location_id}")
-def delete_location(location_id: int, db: Session = Depends(get_db)):
+def delete_location(location_id: UUID, db: Session = Depends(get_db_session)):
     service = LocationService(db)
     return service.delete_location(location_id)

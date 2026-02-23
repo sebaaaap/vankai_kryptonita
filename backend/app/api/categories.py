@@ -1,6 +1,7 @@
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.db.session import get_db
+from app.database import get_db_session
 from app.models.base import ProductCategory
 from app.schemas.categories import CategoryCreate, CategoryResponse
 from typing import List
@@ -26,7 +27,7 @@ def generate_pastel_color():
     return '#%02x%02x%02x' % (int(r * 255), int(g * 255), int(b * 255))
 
 @router.post("/", response_model=CategoryResponse)
-def create_category(data: CategoryCreate, db: Session = Depends(get_db)):
+def create_category(data: CategoryCreate, db: Session = Depends(get_db_session)):
     # Si ya trae color, lo usamos, si no, asignamos uno
     color = data.color
     if not color:
@@ -53,11 +54,11 @@ def create_category(data: CategoryCreate, db: Session = Depends(get_db)):
     return db_obj
 
 @router.get("/", response_model=List[CategoryResponse])
-def list_categories(db: Session = Depends(get_db)):
+def list_categories(db: Session = Depends(get_db_session)):
     return db.query(ProductCategory).all()
 
 @router.delete("/{category_id}")
-def delete_category(category_id: int, db: Session = Depends(get_db)):
+def delete_category(category_id: UUID, db: Session = Depends(get_db_session)):
     db_obj = db.query(ProductCategory).filter(ProductCategory.id == category_id).first()
     if not db_obj:
         raise HTTPException(status_code=404, detail="Categoría no encontrada")

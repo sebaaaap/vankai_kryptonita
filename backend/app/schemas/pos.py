@@ -1,7 +1,9 @@
+from uuid import UUID
 from pydantic import BaseModel, Field, validator
 from typing import List, Optional
 from datetime import datetime
 from enum import Enum
+from decimal import Decimal
 
 # --- Enums ---
 class SaleStateEnum(str, Enum):
@@ -27,17 +29,17 @@ class RefundReasonEnum(str, Enum):
 class ProductBase(BaseModel):
     name: str
     barcode: str
-    price: float = Field(ge=0, description="Precio debe ser mayor o igual a 0")
-    cost: float = Field(ge=0, description="Costo debe ser mayor o igual a 0")
+    price: Decimal = Field(ge=0, description="Precio debe ser mayor o igual a 0")
+    cost: Decimal = Field(ge=0, description="Costo debe ser mayor o igual a 0")
     category: Optional[str] = None
-    category_id: Optional[int] = None
+    category_id: Optional[UUID] = None
     image_path: Optional[str] = None
     internal_reference: Optional[str] = None
     uom: str = "unidades"
 
 class ProductResponse(ProductBase):
-    id: int
-    stock_quantity: float
+    id: UUID
+    stock_quantity: Decimal
     is_active: bool
 
     class Config:
@@ -47,11 +49,11 @@ class ProductResponse(ProductBase):
 class PaymentCreate(BaseModel):
     """Schema para crear un pago individual"""
     payment_method: PaymentMethodEnum
-    amount: float = Field(gt=0, description="Monto debe ser mayor a 0")
+    amount: Decimal = Field(gt=0, description="Monto debe ser mayor a 0")
     reference: Optional[str] = None  # Número de voucher, transacción, etc.
 
 class PaymentResponse(PaymentCreate):
-    id: int
+    id: UUID
     date_created: datetime
     
     class Config:
@@ -60,18 +62,18 @@ class PaymentResponse(PaymentCreate):
 # --- Sale Item Schemas ---
 class SaleItemCreate(BaseModel):
     """Schema para crear un item de venta"""
-    product_id: int
-    quantity: float = Field(gt=0, description="Cantidad debe ser mayor a 0")
-    price: float = Field(ge=0, description="Precio debe ser mayor o igual a 0")
-    discount_percent: float = Field(ge=0, le=100, default=0.0)
+    product_id: UUID
+    quantity: Decimal = Field(gt=0, description="Cantidad debe ser mayor a 0")
+    price: Decimal = Field(ge=0, description="Precio debe ser mayor o igual a 0")
+    discount_percent: Decimal = Field(ge=0, le=100, default=0.0)
 
 class SaleItemResponse(BaseModel):
-    id: int
-    product_id: int
-    quantity: float
-    price: float = Field(validation_alias="unit_price")
-    discount_percent: float
-    subtotal: float
+    id: UUID
+    product_id: UUID
+    quantity: Decimal
+    price: Decimal
+    discount_percent: Decimal
+    subtotal: Decimal
 
     class Config:
         from_attributes = True
@@ -84,7 +86,7 @@ class SaleCreate(BaseModel):
     """
     items: List[SaleItemCreate] = Field(min_items=1, description="Debe haber al menos 1 item")
     payments: List[PaymentCreate] = Field(min_items=1, description="Debe haber al menos 1 pago")
-    session_id: int = Field(..., description="Toda venta debe estar vinculada a una sesión")
+    session_id: UUID = Field(..., description="Toda venta debe estar vinculada a una sesión")
     
     @validator('payments')
     def validate_payments(cls, v, values):
@@ -95,22 +97,22 @@ class SaleCreate(BaseModel):
 
 class SaleValidate(BaseModel):
     """Schema para validar una venta (confirmar y ajustar inventario)"""
-    ticket_id: int
+    ticket_id: UUID
 
 class SaleResponse(BaseModel):
     """Response completo de una venta"""
-    id: int
+    id: UUID
     ticket_number: str
     date_created: datetime
     date_validated: Optional[datetime]
     state: SaleStateEnum
-    subtotal: float
-    tax_amount: float
-    total_amount: float
+    subtotal: Decimal
+    tax_amount: Decimal
+    total_amount: Decimal
     payment_method: str
-    session_id: Optional[int]
+    session_id: Optional[UUID]
     return_to_stock: bool = True
-    original_ticket_id: Optional[int] = None
+    original_ticket_id: Optional[UUID] = None
     items: List[SaleItemResponse]
     payments: List[PaymentResponse]
     
@@ -123,7 +125,7 @@ class RefundCreate(BaseModel):
     Schema para crear una nota de crédito (reembolso)
     No borra la venta original, crea una venta negativa vinculada
     """
-    original_ticket_id: int
+    original_ticket_id: UUID
     items: List[SaleItemCreate]  # Items a reembolsar (pueden ser parciales)
     refund_reason: RefundReasonEnum
     return_to_stock: bool = Field(
@@ -147,5 +149,5 @@ class QuickSaleCreate(BaseModel):
     """
     items: List[SaleItemCreate]
     payment_method: PaymentMethodEnum = PaymentMethodEnum.CASH
-    total_amount: float
-    session_id: int = Field(..., description="Toda venta rápida debe estar vinculada a una sesión")
+    total_amount: Decimal
+    session_id: UUID = Field(..., description="Toda venta rápida debe estar vinculada a una sesión")

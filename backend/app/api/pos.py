@@ -1,3 +1,4 @@
+from uuid import UUID
 """
 API Endpoints para POS
 Implementa el flujo completo de ventas con soporte para:
@@ -10,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from app.db.session import get_db
+from app.database import get_db_session
 from app.services.pos_service import POSService
 from app.schemas.pos import (
     ProductResponse, 
@@ -31,7 +32,7 @@ router = APIRouter()
 @router.get("/products/barcode/{barcode}", response_model=ProductResponse)
 def get_product_by_barcode(
     barcode: str, 
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin", "vendedor", "inventario"]))
 ):
     """
@@ -49,7 +50,7 @@ def search_products(
     category: Optional[str] = Query(None, description="Filtrar por categoría"),
     skip: int = 0,
     limit: int = 50,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin", "vendedor", "inventario"]))
 ):
     """
@@ -76,7 +77,7 @@ def search_products(
 @router.post("/sales", response_model=SaleResponse, status_code=201)
 def create_sale(
     sale: SaleCreate, 
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin", "vendedor"]))
 ):
     """
@@ -97,7 +98,17 @@ def create_sale(
     try:
         print(f"DEBUG: create_sale payload: {sale.model_dump_json(indent=2)}")
         ticket = POSService.create_sale_draft(db, sale)
-        return ticket
+        
+        from fastapi.encoders import jsonable_encoder
+        from app.schemas.pos import SaleResponse
+        
+        # Validar Pydantic para forzar carga de relaciones (items, payments) dentro del try
+        # y usar jsonable_encoder para manejar UUID/Decimal evitando el error 500 de FastAPI
+        response_data = SaleResponse.model_validate(ticket)
+        return jsonable_encoder(response_data)
+    except HTTPException:
+        # Re-lanzar para que FastAPI maneje el código correcto (400, 404, etc)
+        raise
     except Exception as e:
         print(f"ERROR en create_sale: {e}")
         import traceback
@@ -107,7 +118,7 @@ def create_sale(
 @router.post("/sales/quick", response_model=SaleResponse, status_code=201)
 def create_quick_sale(
     sale: QuickSaleCreate, 
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin", "vendedor"]))
 ):
     """
@@ -125,10 +136,12 @@ def create_quick_sale(
     # Marcar como pagada
     ticket = POSService.mark_as_paid(db, ticket.id)
     
-    return ticket
+    from fastapi.encoders import jsonable_encoder
+    from app.schemas.pos import SaleResponse
+    return jsonable_encoder(SaleResponse.model_validate(ticket))
 
 @router.post("/sales/{ticket_id}/validate", response_model=SaleResponse)
-def validate_sale(ticket_id: int, db: Session = Depends(get_db)):
+def validate_sale(ticket_id: UUID, db: Session = Depends(get_db_session)):
     """
     Valida una venta: DRAFT -> VALIDATED
     Ajusta el inventario de forma atómica
@@ -138,7 +151,7 @@ def validate_sale(ticket_id: int, db: Session = Depends(get_db)):
     return ticket
 
 @router.post("/sales/{ticket_id}/pay", response_model=SaleResponse)
-def mark_sale_as_paid(ticket_id: int, db: Session = Depends(get_db)):
+def mark_sale_as_paid(ticket_id: UUID, db: Session = Depends(get_db_session)):
     """
     Marca una venta como pagada: VALIDATED -> PAID
     """
@@ -146,7 +159,7 @@ def mark_sale_as_paid(ticket_id: int, db: Session = Depends(get_db)):
     return ticket
 
 @router.get("/sales/{ticket_id}", response_model=SaleResponse)
-def get_sale(ticket_id: int, db: Session = Depends(get_db)):
+def get_sale(ticket_id: UUID, db: Session = Depends(get_db_session)):
     """Obtiene una venta por ID"""
     ticket = POSService.get_sale_by_id(db, ticket_id)
     if not ticket:
@@ -154,7 +167,7 @@ def get_sale(ticket_id: int, db: Session = Depends(get_db)):
     return ticket
 
 @router.get("/sales/session/{session_id}", response_model=List[SaleResponse])
-def get_sales_by_session(session_id: int, db: Session = Depends(get_db)):
+def get_sales_by_session(session_id: UUID, db: Session = Depends(get_db_session)):
     """Obtiene todas las ventas de una sesión"""
     tickets = POSService.get_sales_by_session(db, session_id)
     return tickets
@@ -162,7 +175,7 @@ def get_sales_by_session(session_id: int, db: Session = Depends(get_db)):
 # --- Refund Endpoints ---
 
 @router.post("/refunds", response_model=RefundResponse, status_code=201)
-def create_refund(refund: RefundCreate, db: Session = Depends(get_db)):
+def create_refund(refund: RefundCreate, db: Session = Depends(get_db_session)):
     """
     Crea una nota de crédito (reembolso)
     NO borra la venta original, crea una venta negativa vinculada
@@ -181,10 +194,14 @@ def create_refund(refund: RefundCreate, db: Session = Depends(get_db)):
     try:
         credit_note, original_ticket = POSService.create_refund(db, refund)
         
-        return RefundResponse(
-            credit_note=credit_note,
-            original_ticket=original_ticket
-        )
+        from fastapi.encoders import jsonable_encoder
+        from app.schemas.pos import RefundResponse
+        
+        response_data = RefundResponse.model_validate({
+            "credit_note": credit_note,
+            "original_ticket": original_ticket
+        })
+        return jsonable_encoder(response_data)
     except Exception as e:
         print(f"ERROR en create_refund: {e}")
         import traceback

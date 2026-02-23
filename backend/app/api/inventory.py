@@ -1,6 +1,7 @@
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.db.session import get_db
+from app.database import get_db_session
 from app.schemas.inventory import InventoryMovementCreate, InventoryMovementResponse
 from app.services.inventory_service import InventoryService
 from typing import List
@@ -11,7 +12,7 @@ router = APIRouter()
 @router.post("/adjustments", response_model=InventoryMovementResponse)
 def create_adjustment(
     data: InventoryMovementCreate, 
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin", "inventario"]))
 ):
     """
@@ -22,7 +23,7 @@ def create_adjustment(
 
 @router.get("/movements", response_model=List[InventoryMovementResponse])
 def list_movements(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin", "inventario"]))
 ):
     """
@@ -54,7 +55,7 @@ def list_movements(
 
 @router.get("/reports")
 def get_inventory_reports(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_session),
     current_user = Depends(check_roles(["admin", "inventario"]))
 ):
     """

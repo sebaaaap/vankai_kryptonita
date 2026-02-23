@@ -48,6 +48,26 @@ def root():
         "database": "SQLite (Local)" if "sqlite" in settings.DATABASE_URL else "PostgreSQL (VPS)"
     }
 
+from app.database import engine
+from sqlalchemy import text
+import time
+
+@app.on_event("startup")
+def startup_event():
+    retries = 3
+    while retries > 0:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            print("Database connected successfully!")
+            break
+        except Exception as e:
+            retries -= 1
+            print(f"Database connection failed. Retries left: {retries}. Error: {e}")
+            if retries == 0:
+                raise RuntimeError("Critical Error: Cannot connect to PostgreSQL")
+            time.sleep(2)
+
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}

@@ -1,29 +1,31 @@
+from uuid import UUID
 from pydantic import BaseModel, field_validator
 from datetime import datetime
 from typing import List, Optional
 from app.models.base import MovementType
+from decimal import Decimal
 
 class InventoryMovementItemCreate(BaseModel):
-    product_id: int
-    quantity: float
+    product_id: UUID
+    quantity: Decimal
 
 class InventoryMovementCreate(BaseModel):
     items: List[InventoryMovementItemCreate]
     type: str # ENUM como string: "IN_PURCHASE", etc
     reason: Optional[str] = None
-    to_location_id: Optional[int] = None
+    to_location_id: Optional[UUID] = None
 
 class InventoryMovementItemDetail(BaseModel):
-    id: int
-    product_id: int
+    id: UUID
+    product_id: UUID
     product_name: str
-    quantity: float
+    quantity: Decimal
 
     class Config:
         from_attributes = True
 
 class InventoryMovementResponse(BaseModel):
-    id: int
+    id: UUID
     date: datetime
     type: str # O MovementType si queremos el enum
     reason: Optional[str]

@@ -50,7 +50,7 @@ def _crear_venta_pagada(db, producto, sesion, metodo_pago: str) -> Ticket:
     db.flush()
 
     item = SaleItem(
-        ticket_id=ticket.id,
+        ticket_id=str(ticket.id),
         product_id=producto.id,
         quantity=cantidad,
         unit_price=precio_unitario,
@@ -60,7 +60,7 @@ def _crear_venta_pagada(db, producto, sesion, metodo_pago: str) -> Ticket:
     db.add(item)
 
     pago = Payment(
-        ticket_id=ticket.id,
+        ticket_id=str(ticket.id),
         payment_method=PaymentMethod[metodo_pago.upper()],
         amount=total,
     )

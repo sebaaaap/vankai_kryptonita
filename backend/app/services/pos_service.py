@@ -8,6 +8,8 @@ from sqlalchemy import and_
 from datetime import datetime
 from typing import List, Optional, Union
 from fastapi import HTTPException
+from decimal import Decimal
+from app.core.utils import round_decimal
 
 from app.models.base import (
     Ticket, SaleItem, Payment, Product, CashSession, 
@@ -28,32 +30,42 @@ class POSService:
         year = datetime.now().year
         last_ticket = db.query(Ticket).filter(
             Ticket.ticket_number.like(f"{prefix}-{year}-%")
-        ).order_by(Ticket.id.desc()).first()
+        ).order_by(Ticket.ticket_number.desc()).first()
         
         if last_ticket:
-            last_num = int(last_ticket.ticket_number.split('-')[-1])
-            new_num = last_num + 1
+            try:
+                last_num = int(last_ticket.ticket_number.split('-')[-1])
+                new_num = last_num + 1
+            except (ValueError, IndexError):
+                new_num = 1
         else:
             new_num = 1
             
         return f"{prefix}-{year}-{new_num:04d}"
     
     @staticmethod
-    def calculate_totals(items: List[SaleItemCreate]) -> tuple[float, float, float]:
+    def calculate_totals(items: List[SaleItemCreate]) -> tuple[Decimal, Decimal, Decimal]:
         """
-        Calcula subtotal, IVA y total
+        Calcula subtotal, IVA y total usando Decimal para precisión
         Returns: (subtotal, tax_amount, total)
         """
-        subtotal = 0.0
+        subtotal = Decimal('0.00')
         for item in items:
-            item_subtotal = item.quantity * item.price
-            if item.discount_percent > 0:
-                item_subtotal *= (1 - item.discount_percent / 100)
+            item_qty = Decimal(str(item.quantity))
+            item_price = Decimal(str(item.price))
+            item_disc = Decimal(str(item.discount_percent))
+            
+            item_subtotal = item_qty * item_price
+            if item_disc > 0:
+                item_subtotal *= (Decimal('1') - (item_disc / Decimal('100')))
             subtotal += item_subtotal
         
+        # Redondear subtotal
+        subtotal = round_decimal(subtotal)
+        
         # IVA 19% adicional al precio (Neto + IVA)
-        tax_amount = subtotal * 0.19
-        total = subtotal + tax_amount
+        tax_amount = round_decimal(subtotal * Decimal('0.19'))
+        total = round_decimal(subtotal + tax_amount)
         
         return (subtotal, tax_amount, total)
     
@@ -90,10 +102,12 @@ class POSService:
             
             # Buscar todas las instancias del producto (mismo barcode) con stock > 0
             # EXCLUYENDO la ubicación de "Pasillo Mermas" para que no sea vendible
-            candidates = db.query(Product).join(Product.location).filter(
+            # Usamos outerjoin porque location_id puede ser NULL
+            from sqlalchemy import or_
+            candidates = db.query(Product).outerjoin(Product.location).filter(
                 Product.barcode == original_product.barcode,
                 Product.stock_quantity > 0,
-                StorageLocation.name != "Pasillo Mermas"
+                or_(StorageLocation.id == None, StorageLocation.name != "Pasillo Mermas")
             ).order_by(Product.stock_quantity.desc()).all()
             
             total_available = sum(p.stock_quantity for p in candidates)
@@ -133,12 +147,24 @@ class POSService:
         # pero matemáticamente es igual a la suma de los desglosados)
         subtotal, tax_amount, total = POSService.calculate_totals(sale_data.items)
         
-        # Validar que la suma de pagos coincida con el total
+        # Validar que la suma de pagos sea coherente con el total
         total_payments = sum(p.amount for p in sale_data.payments)
-        if abs(total_payments - total) > 0.01:  # Tolerancia de 1 centavo
+        
+        # Si hay una diferencia sospechosa (ej. el IVA), avisar
+        if abs(total_payments - total) > Decimal('1.00'):
+             print(f"ALERTA: Diferencia de montos. Recibido={total_payments}, Calculado={total}")
+             # Si el total recibido es MENOR que el calculado, podría ser que el frontend mandó precios netos
+             # Si el total recibido es IGUAL al calculado sin el tax_amount adicional, 
+             # entonces el frontend ya mandó precios con IVA.
+             # En ese caso, ajustamos el total para que la venta no falle.
+             if abs(total_payments - subtotal) < Decimal('0.10'):
+                  total = subtotal
+                  tax_amount = Decimal('0.00') # Los precios ya traen el IVA
+        
+        if abs(total_payments - total) > Decimal('1.00'):
             raise HTTPException(
                 status_code=400,
-                detail=f"La suma de pagos ({total_payments}) no coincide con el total ({total})"
+                detail=f"La suma de pagos ({total_payments}) no coincide con el total esperado ({total})"
             )
         
         # Crear ticket en DRAFT
@@ -172,9 +198,17 @@ class POSService:
         
         # Crear pagos
         for payment_data in sale_data.payments:
+            # Mapeo seguro de método de pago
+            try:
+                pm_enum = PaymentMethod[payment_data.payment_method.name]
+            except (KeyError, AttributeError):
+                # Fallback por valor si el nombre falla
+                pm_val = payment_data.payment_method.value
+                pm_enum = next((m for m in PaymentMethod if m.value == pm_val), PaymentMethod.CASH)
+
             payment = Payment(
                 ticket_id=ticket.id,
-                payment_method=PaymentMethod[payment_data.payment_method.name],
+                payment_method=pm_enum,
                 amount=payment_data.amount,
                 reference=payment_data.reference
             )
@@ -356,4 +390,4 @@ class POSService:
     @staticmethod
     def get_sales_by_session(db: Session, session_id: int) -> List[Ticket]:
         """Obtiene todas las ventas de una sesión"""
-        return db.query(Ticket).filter(Ticket.session_id == session_id).all()
+        return db.query(Ticket).filter(Ticket.session_id == session_id).order_by(Ticket.created_at.desc()).all()

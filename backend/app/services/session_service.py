@@ -1,3 +1,4 @@
+from decimal import Decimal
 """
 Servicio de Sesiones de Caja
 Maneja apertura, cierre y arqueo de caja
@@ -89,9 +90,9 @@ class SessionService:
 
         # --- 2. Sincronizar Totales de Sesión (Integridad) ---
         # Recalculamos los totales para asegurar que coincidan exactamente con los tickets
-        session.total_sales_cash = 0.0
-        session.total_sales_card = 0.0
-        session.total_sales_transfer = 0.0
+        session.total_sales_cash = Decimal('0.00')
+        session.total_sales_card = Decimal('0.00')
+        session.total_sales_transfer = Decimal('0.00')
         
         session_tickets = db.query(Ticket).filter(
             Ticket.session_id == session_id,
@@ -128,14 +129,19 @@ class SessionService:
         ).all()
 
         stock_updates = {} # product_id -> total_quantity
+        merma_updates = {} # product_id -> merma_quantity
         for item in session_items:
             # Las notas de crédito (reembolsos) tienen item.quantity negativo
             # Solo afectamos el stock si el producto efectivamente regresa al inventario
             if item.quantity < 0:
                 if item.ticket.return_to_stock:
                     stock_updates[item.product_id] = stock_updates.get(item.product_id, 0) + item.quantity
-                # Si no regresa a stock (merma/dañado), ignoramos la cantidad negativa
-                # para que el descuento de la venta original permanezca intacto.
+                else:
+                    # Si no regresa a stock (merma/dañado)
+                    # Añadimos la cantidad negativa a stock_updates para anular el descuento de la venta
+                    # Y lo añadimos a merma_updates para moverlo físicamente a "Pasillo Mermas"
+                    stock_updates[item.product_id] = stock_updates.get(item.product_id, 0) + item.quantity
+                    merma_updates[item.product_id] = merma_updates.get(item.product_id, 0) + abs(item.quantity)
             else:
                 # Ventas normales (cantidad positiva)
                 stock_updates[item.product_id] = stock_updates.get(item.product_id, 0) + item.quantity
@@ -168,6 +174,20 @@ class SessionService:
                     stock_after=stock_after
                 )
                 db.add(movement_item)
+
+        # --- 3.5. Transacción de Mermas ---
+        if merma_updates:
+            from app.services.inventory_service import InventoryService
+            inv_service = InventoryService(db)
+            merma_loc_id = inv_service._get_or_create_merma_location()
+            
+            for product_id, qty in merma_updates.items():
+                if qty <= 0: continue
+                product = db.query(Product).filter(Product.id == product_id).with_for_update().first()
+                if not product: continue
+                
+                # Ejecutar traslado a mermas
+                inv_service._transfer_stock(product, qty, merma_loc_id)
 
         # --- 4. Finalizar Sesión ---
         expected_cash = session.initial_cash + session.total_sales_cash
@@ -216,7 +236,7 @@ class SessionService:
             raise HTTPException(status_code=404, detail="Sesión no encontrada")
         
         # Obtener tickets de la sesión
-        tickets = db.query(Ticket).filter(Ticket.session_id == session_id).all()
+        tickets = db.query(Ticket).filter(Ticket.session_id == session_id).order_by(Ticket.created_at.desc()).all()
         
         # Calcular estadísticas
         total_transactions = len(tickets)

@@ -1,5 +1,7 @@
+from uuid import UUID
 from pydantic import BaseModel
 from typing import List, Optional
+from decimal import Decimal
 
 class LocationBase(BaseModel):
     name: str
@@ -7,7 +9,7 @@ class LocationBase(BaseModel):
     side: Optional[str] = None
     column: Optional[int] = None
     level: Optional[int] = None
-    parent_id: Optional[int] = None
+    parent_id: Optional[UUID] = None
     path: Optional[str] = None
     allows_multiple_products: bool = True
 
@@ -21,7 +23,7 @@ class AisleGenerate(BaseModel):
     allows_multiple_products: bool = False # Por defecto pasillos son estrictos según requerimiento típico
 
 class LocationResponse(LocationBase):
-    id: int
+    id: UUID
     children: List['LocationResponse'] = [] # Nested response
 
     class Config:
@@ -31,20 +33,20 @@ class ProductBase(BaseModel):
     name: str
     internal_reference: Optional[str] = None
     barcode: str
-    price: float
-    cost: float
+    price: Decimal
+    cost: Decimal
     uom: str = "unidades" 
-    stock_quantity: float = 0
-    min_stock: float = 5
+    stock_quantity: Decimal = 0
+    min_stock: Decimal = 5
     product_type: str = "STORABLE"
-    location_id: Optional[int] = None
-    category_id: Optional[int] = None
+    location_id: Optional[UUID] = None
+    category_id: Optional[UUID] = None
 
 class ProductCreateWithLocation(ProductBase):
     pass
 
 class ProductResponseWithLocation(ProductBase):
-    id: int
+    id: UUID
     location: Optional[LocationBase]
     
     class Config:
