@@ -72,9 +72,10 @@ class PurchaseService:
             self.db.add(purchase_item)
             calculated_net += subtotal
 
-        purchase.subtotal_net = round_decimal(calculated_net)
-        purchase.tax_amount = round_decimal(purchase.subtotal_net * Decimal('0.19')) # IVA 19% Chile
-        purchase.total_cost = round_decimal(purchase.subtotal_net + purchase.tax_amount)
+        total_cost = round_decimal(calculated_net)
+        purchase.total_cost = total_cost
+        purchase.tax_amount = round_decimal(total_cost * Decimal('0.19')) # IVA 19%
+        purchase.subtotal_net = round_decimal(total_cost - purchase.tax_amount) # Neto es total - IVA
         
         try:
             self.db.commit()

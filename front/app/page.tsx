@@ -50,15 +50,19 @@ function createEmptyOrder(): Order {
 }
 
 function calculateLineTotals(lines: OrderLine[]) {
-  const subtotal = lines.reduce((acc, line) => {
-    const lineBase = line.unitPrice * line.quantity * (1 - line.discount / 100)
-    return acc + lineBase
+  // El precio YA incluye IVA. 
+  // Total = suma de (precio * cantidad)
+  // IVA = 19% del Total (según requerimiento de usuario)
+  // Subtotal (Neto) = Total - IVA
+  const total = lines.reduce((acc, line) => {
+    const lineTotal = line.unitPrice * line.quantity * (1 - line.discount / 100)
+    return acc + lineTotal
   }, 0)
-  const tax = lines.reduce((acc, line) => {
-    const lineBase = line.unitPrice * line.quantity * (1 - line.discount / 100)
-    return acc + lineBase * (line.product.tax / 100)
-  }, 0)
-  return { subtotal, tax, total: subtotal + tax }
+
+  const tax = total * 0.19
+  const subtotal = total - tax
+
+  return { subtotal, tax, total }
 }
 
 
@@ -82,7 +86,7 @@ export default function AppPage() {
   }, [user, isLoading, currentModule])
 
   // API Data
-  const { data: apiProducts, error: productsError } = useSWR("/pos/products", apiService.getProducts)
+  const { data: apiProducts, error: productsError } = useSWR("/products/", apiService.getProducts)
   const { data: apiCategories } = useSWR("/categories/", apiService.getCategories)
   const { data: activeSession } = useSWR("/sessions/active", apiService.getActiveSession)
   const { data: apiCustomers } = useSWR("/customers/", () => apiService.getCustomers())
@@ -196,38 +200,19 @@ export default function AppPage() {
     })
 
     return base.map(p => {
-      // Stock Proyectado = Stock DB - Ventas Sesión + Devoluciones Reingresadas
-      const sessionSold = (paidOrders || []).reduce((acc, order) => {
-        // MUY IMPORTANTE: Comparar por BARCODE, no por ID.
-        // El stock en el punto de venta es agregado por barcode, pero la venta
-        // física puede haber usado una ubicación (ID) específica.
-        const linesForProduct = (order.lines || []).filter(l => l.product.barcode === p.barcode)
-
-        let subtotalLines = 0
-        linesForProduct.forEach(line => {
-          const qty = toNum(line.quantity)
-          if (qty > 0) {
-            subtotalLines += qty
-          } else if (qty < 0 && order.returnToStock) {
-            // Es un reembolso y vuelve a stock, por lo que su cantidad < 0 suma de vuelta al stock disponible
-            // OJO: subtotalLines es lo que ESTA SESION HA VENDIDO, así que un reembolso DEVUELVE stock,
-            // por tanto, hace que sessionSold SEA MENOR (al sumar un negativo a las ventas).
-            subtotalLines += qty // qty is negative, so adding it actually subtracts from sessionSold, which means more valid stock available
-          }
-        })
-
-        return acc + subtotalLines
-      }, 0)
-
+      // INVENTARIO EN TIEMPO REAL:
+      // El stock de la API (p.stock) ya es el stock real después de cada venta.
+      // El backend descuenta inmediatamente en cada POST /sales.
+      // Solo restamos lo que hay en el carrito actual (aún no cobrado).
       const lineInCart = orders[currentOrderIndex]?.lines.find(l => l.product.barcode === p.barcode)
       const cartQty = lineInCart ? toNum(lineInCart.quantity) : 0
 
       return {
         ...p,
-        stock: Math.max(0, toNum(p.stock) - sessionSold - cartQty)
+        stock: Math.max(0, toNum(p.stock) - cartQty)
       }
     })
-  }, [mappedProducts, selectedCategoryId, searchQuery, orders, currentOrderIndex, paidOrders])
+  }, [mappedProducts, selectedCategoryId, searchQuery, orders, currentOrderIndex])
 
   const updateCurrentOrder = useCallback(
     (updater: (order: Order) => Order) => {
@@ -386,17 +371,9 @@ export default function AppPage() {
                 const productMain = mappedProducts.find(p => String(p.id) === String(l.product.id))
                 const dbStock = productMain ? productMain.stock : 0
 
-                const sessionSold = paidOrders.reduce((acc, order) => {
-                  const line = order.lines.find(sl => String(sl.product.barcode) === String(l.product.barcode))
-                  if (!line) return acc
-                  if (line.quantity > 0) return acc + line.quantity
-                  if (line.quantity < 0 && order.returnToStock) {
-                    return acc + line.quantity // Negativo, así que resta de la cantidad "vendida"
-                  }
-                  return acc
-                }, 0)
-
-                const maxAvailable = Math.max(0, dbStock - sessionSold)
+                // INVENTARIO EN TIEMPO REAL: el stock de la DB ya está actualizado.
+                // Solo limitamos por el stock de DB menos lo ya en el carrito en otros items.
+                const maxAvailable = Math.max(0, dbStock)
 
                 if (val > maxAvailable) {
                   cappedVal = maxAvailable
@@ -698,7 +675,7 @@ export default function AppPage() {
 
         toast.success(`Venta #${finalTicket.ticket_number} completada ✓`)
 
-        mutate("/pos/products")
+        mutate("/products/")
         mutate("/sessions/active")
 
         const paidOrder: Order = {
@@ -757,9 +734,34 @@ export default function AppPage() {
         return_to_stock: refundData.returnToStock
       })
 
-      toast.success(`Reembolso procesado`)
+      toast.success(refundData.returnToStock
+        ? `Reembolso procesado — stock repuesto ✓`
+        : `Reembolso procesado — artículos enviados a merma ✓`
+      )
 
-      mutate("/pos/products")
+      // Actualización optimista del cache de SWR para reflejo instantáneo
+      // Ajustamos el stock en la cache ANTES del re-fetch para evitar cualquier retraso
+      if (refundData.returnToStock) {
+        mutate("/products/", (currentProducts: any[] | undefined) => {
+          if (!currentProducts) return currentProducts
+          return currentProducts.map(p => {
+            const refundedItem = refundData.items.find(
+              ri => ri.product_id === p.id ||
+                ri.product_id === String(p.id)
+            )
+            if (!refundedItem) return p
+            return {
+              ...p,
+              stock_quantity: (p.stock_quantity || 0) + refundedItem.quantity,
+              total_stock: ((p as any).total_stock || 0) + refundedItem.quantity,
+            }
+          })
+        }, { revalidate: true }) // true = también hace re-fetch en background para confirmar
+      } else {
+        // Merma: el stock ya fue descontado al vender, no cambia para el POS normal
+        mutate("/products/")
+      }
+
       mutate("/sessions/active")
 
       setPaidOrders(prev => prev.map(o =>
@@ -828,7 +830,7 @@ export default function AppPage() {
       toast.success("Sesión cerrada")
       setPaidOrders([])
       mutate("/sessions/active")
-      mutate("/pos/products")
+      mutate("/products/")
       setShowCloseSession(false)
       setCurrentModule("backend")
     } catch (error) {
@@ -842,7 +844,7 @@ export default function AppPage() {
       toast.success("Sesión iniciada")
       setPaidOrders([])
       mutate("/sessions/active")
-      mutate("/pos/products")
+      mutate("/products/")
       setShowOpenSession(false)
     } catch (error) {
       toast.error("Error al iniciar sesión")

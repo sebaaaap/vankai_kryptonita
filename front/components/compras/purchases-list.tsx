@@ -120,9 +120,11 @@ export function PurchasesList() {
     };
 
     const calculateTotals = () => {
-        const net = items.reduce((sum, item) => sum + item.quantity * item.unit_cost, 0);
-        const tax = net * 0.19;
-        return { net, tax, total: net + tax };
+        // En este sistema, el costo unitario ingresado YA incluye IVA (Costo Bruto)
+        const total = items.reduce((sum, item) => sum + item.quantity * item.unit_cost, 0);
+        const tax = total * 0.19;
+        const net = total - tax;
+        return { net, tax, total };
     };
 
     const handleCreatePurchase = async (e: React.FormEvent) => {

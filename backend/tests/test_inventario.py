@@ -139,7 +139,7 @@ def test_merma_reduce_stock_y_registra_movimiento(client, db, admin_token, produ
         "reason": "Productos dañados en bodega - inspección semanal",
         "items": [
             {
-                "product_id": p.id,
+                "product_id": str(p.id),
                 "quantity": cantidad_merma,
             }
         ],
@@ -194,7 +194,7 @@ def test_ajuste_entrada_incrementa_stock(client, db, admin_token, producto_en_bo
     payload = {
         "type": "IN_ADJUSTMENT",
         "reason": "Ajuste inventario físico - diferencia positiva",
-        "items": [{"product_id": p.id, "quantity": 5}],
+        "items": [{"product_id": str(p.id), "quantity": 5}],
     }
 
     resp = client.post(
@@ -235,8 +235,8 @@ def test_cambio_ubicacion_interna(db, admin_token, client, ubicaciones, producto
     payload = {
         "type": "INTERNAL_TRANSFER",
         "reason": f"Reorganización bodega: {p.location.name} → {nueva_ubicacion.name}",
-        "items": [{"product_id": p.id, "quantity": p.stock_quantity}],
-        "destination_location_id": nueva_ubicacion.id,
+        "items": [{"product_id": str(p.id), "quantity": float(p.stock_quantity)}],
+        "destination_location_id": str(nueva_ubicacion.id),
     }
 
     resp = client.post(
@@ -345,22 +345,22 @@ def test_venta_supera_stock_retorna_error(client, db, admin_token, aceite_con_st
 
     # El total debe cuadrar con payments para que el error sea por stock,
     # no por descuadre de pagos. Precio * cantidad pedida.
-    total_venta = aceite.price * cantidad_pedida  # 4500 * 10 = 45000
+    total_venta = float(aceite.price) * cantidad_pedida  # 4500 * 10 = 45000
     # (IVA se calcula internamente, así que el payment debe ser sobre el total con IVA)
     # El servicio valida pagos vs total_con_iva. Para evitar ese error primero,
     # usamos el endpoint /quick que hace la validación de stock antes de pagos.
     payload = {
         "items": [
             {
-                "product_id": aceite.id,
-                "quantity": cantidad_pedida,
-                "price": aceite.price,
+                "product_id": str(aceite.id),
+                "quantity": float(cantidad_pedida),
+                "price": float(aceite.price),
             }
         ],
         # QuickSaleCreate: un solo método + total_amount explícito (requerido por schema)
         "payment_method": "efectivo",
-        "total_amount": aceite.price * cantidad_pedida,  # ← campo requerido
-        "session_id": sesion.id,
+        "total_amount": float(aceite.price) * float(cantidad_pedida),  # ← campo requerido
+        "session_id": str(sesion.id),
     }
 
     tickets_antes = db.query(TicketModel).count()

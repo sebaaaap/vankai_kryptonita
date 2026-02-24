@@ -59,11 +59,10 @@ class SessionService:
     @staticmethod
     def close_session(db: Session, session_id: int, close_data: CashSessionClose) -> CashSession:
         """
-        Cierra una sesión de caja (Lógica Odoo Senior)
+        Cierra una sesión de caja
         1. Valida/Paga tickets que quedaron pendientes.
-        2. Agrupa todos los productos vendidos en la sesión.
-        3. Realiza UNA sola transacción atómica para descontar stock.
-        4. Crea los logs de inventario correspondientes.
+        2. Recalcula e iguala los montos de cierre de sesión.
+        Nota: El descuento de stock atómico ahora ocurre en tiempo real durante la venta.
         """
         from app.models.base import (
             Ticket, SaleItem, CashSession, SaleState, Product, 
@@ -121,73 +120,11 @@ class SessionService:
                 else:
                     session.total_sales_cash += t.total_amount
 
-        # --- 3. Agrupar consumos de stock ---
-        # Buscamos todos los items de tickets validados o pagados de esta sesión
-        session_items = db.query(SaleItem).join(Ticket).filter(
-            Ticket.session_id == session_id,
-            Ticket.state.in_([SaleState.VALIDATED, SaleState.PAID, SaleState.REFUNDED])
-        ).all()
 
-        stock_updates = {} # product_id -> total_quantity
-        merma_updates = {} # product_id -> merma_quantity
-        for item in session_items:
-            # Las notas de crédito (reembolsos) tienen item.quantity negativo
-            # Solo afectamos el stock si el producto efectivamente regresa al inventario
-            if item.quantity < 0:
-                if item.ticket.return_to_stock:
-                    stock_updates[item.product_id] = stock_updates.get(item.product_id, 0) + item.quantity
-                else:
-                    # Si no regresa a stock (merma/dañado)
-                    # Añadimos la cantidad negativa a stock_updates para anular el descuento de la venta
-                    # Y lo añadimos a merma_updates para moverlo físicamente a "Pasillo Mermas"
-                    stock_updates[item.product_id] = stock_updates.get(item.product_id, 0) + item.quantity
-                    merma_updates[item.product_id] = merma_updates.get(item.product_id, 0) + abs(item.quantity)
-            else:
-                # Ventas normales (cantidad positiva)
-                stock_updates[item.product_id] = stock_updates.get(item.product_id, 0) + item.quantity
+        # --- 3. No más Snapshot de Inventario ---
+        # El descuento de stock y actualización de mermas ahora se hace
+        # en tiempo real directamente en la venta (POST /sales).
 
-        # --- 3. Transacción Atómica de Inventario ---
-        if stock_updates:
-            movement = InventoryMovement(
-                type=MovementType.OUT_SALE,
-                reason=f"Cierre de Sesión POS: {session.name} (Resumen)",
-            )
-            db.add(movement)
-            db.flush()
-
-            for product_id, total_qty in stock_updates.items():
-                if total_qty == 0: continue # Sin cambio neto
-
-                product = db.query(Product).filter(Product.id == product_id).with_for_update().first()
-                if not product: continue
-
-                stock_before = product.stock_quantity
-                # total_qty es positivo para ventas netas, negativo para devoluciones netas
-                product.stock_quantity -= total_qty
-                stock_after = product.stock_quantity
-
-                movement_item = InventoryMovementItem(
-                    movement_id=movement.id,
-                    product_id=product.id,
-                    quantity=-total_qty, # Refleja cambio en stock: -5 para venta, +2 para reembolso
-                    stock_before=stock_before,
-                    stock_after=stock_after
-                )
-                db.add(movement_item)
-
-        # --- 3.5. Transacción de Mermas ---
-        if merma_updates:
-            from app.services.inventory_service import InventoryService
-            inv_service = InventoryService(db)
-            merma_loc_id = inv_service._get_or_create_merma_location()
-            
-            for product_id, qty in merma_updates.items():
-                if qty <= 0: continue
-                product = db.query(Product).filter(Product.id == product_id).with_for_update().first()
-                if not product: continue
-                
-                # Ejecutar traslado a mermas
-                inv_service._transfer_stock(product, qty, merma_loc_id)
 
         # --- 4. Finalizar Sesión ---
         expected_cash = session.initial_cash + session.total_sales_cash

@@ -81,8 +81,9 @@ def create_sale(
     current_user = Depends(check_roles(["admin", "vendedor"]))
 ):
     """
-    Crea una venta en estado DRAFT con pagos divididos
-    NO afecta el inventario hasta que se valide
+    Crea una venta con pagos divididos (estado inicial)
+    Afecta el inventario de manera INMEDIATA y en TIEMPO REAL 
+    restando las cantidades del stock en una transacción atómica.
     
     Ejemplo de payload con split payments:
     {

@@ -46,26 +46,33 @@ class POSService:
     @staticmethod
     def calculate_totals(items: List[SaleItemCreate]) -> tuple[Decimal, Decimal, Decimal]:
         """
-        Calcula subtotal, IVA y total usando Decimal para precisión
-        Returns: (subtotal, tax_amount, total)
+        Calcula subtotal (neto), IVA y total usando Decimal para precisión.
+        
+        MODELO DE PRECIOS: El precio registrado en el sistema ES el precio final
+        que paga el cliente (IVA incluido). El IVA se EXTRAE del precio, no se agrega.
+        
+        Ejemplo: producto a $4.000
+          → Total (lo que paga cliente) = $4.000
+          → IVA (19% del total)         = $760
+          → Neto (subtotal sin IVA)     = $3.240
+        
+        Returns: (neto, iva, total)
         """
-        subtotal = Decimal('0.00')
+        total = Decimal('0.00')
         for item in items:
             item_qty = Decimal(str(item.quantity))
             item_price = Decimal(str(item.price))
-            item_disc = Decimal(str(item.discount_percent))
+            item_disc = Decimal(str(item.discount_percent)) if item.discount_percent else Decimal('0')
             
-            item_subtotal = item_qty * item_price
+            item_total = item_qty * item_price
             if item_disc > 0:
-                item_subtotal *= (Decimal('1') - (item_disc / Decimal('100')))
-            subtotal += item_subtotal
+                item_total *= (Decimal('1') - (item_disc / Decimal('100')))
+            total += item_total
         
-        # Redondear subtotal
-        subtotal = round_decimal(subtotal)
-        
-        # IVA 19% adicional al precio (Neto + IVA)
-        tax_amount = round_decimal(subtotal * Decimal('0.19'))
-        total = round_decimal(subtotal + tax_amount)
+        # El precio YA incluye IVA → extraemos IVA del total
+        total      = round_decimal(total)
+        tax_amount = round_decimal(total * Decimal('0.19'))
+        subtotal   = round_decimal(total - tax_amount)   # neto sin IVA
         
         return (subtotal, tax_amount, total)
     
@@ -75,11 +82,9 @@ class POSService:
         sale_data: Union[SaleCreate, QuickSaleCreate]
     ) -> Ticket:
         """
-        Crea una venta en estado DRAFT
-        NO afecta el inventario hasta que se valide
-        Realiza asignación inteligente de stock entre ubicaciones.
+        Crea una venta, y descuenta el stock de forma atómica.
+        Usa with_for_update para control de concurrencia.
         """
-        # Convertir QuickSaleCreate a SaleCreate si es necesario
         if isinstance(sale_data, QuickSaleCreate):
             payments = [PaymentCreate(
                 payment_method=sale_data.payment_method,
@@ -90,133 +95,146 @@ class POSService:
                 payments=payments,
                 session_id=sale_data.session_id
             )
-        
-        # --- Lógica de Asignación de Stock (Smart Deduction) ---
-        final_items_to_create = [] # Lista de (product_id, quantity, price, discount)
-        
-        for item in sale_data.items:
-            # Buscar producto original para obtener barcode
-            original_product = db.query(Product).filter(Product.id == item.product_id).first()
-            if not original_product:
-                raise HTTPException(status_code=404, detail=f"Producto {item.product_id} no encontrado")
-            
-            # Buscar todas las instancias del producto (mismo barcode) con stock > 0
-            # EXCLUYENDO la ubicación de "Pasillo Mermas" para que no sea vendible
-            # Usamos outerjoin porque location_id puede ser NULL
-            from sqlalchemy import or_
-            candidates = db.query(Product).outerjoin(Product.location).filter(
-                Product.barcode == original_product.barcode,
-                Product.stock_quantity > 0,
-                or_(StorageLocation.id == None, StorageLocation.name != "Pasillo Mermas")
-            ).order_by(Product.stock_quantity.desc()).all()
-            
-            total_available = sum(p.stock_quantity for p in candidates)
-            
-            if total_available < item.quantity:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Stock insuficiente para {original_product.name}. Total disponible: {total_available}"
+
+        try:
+            with db.begin_nested():
+                movement = InventoryMovement(
+                    type=MovementType.OUT_SALE,
+                    reason="Venta POS (Tiempo Real)"
                 )
-            
-            # Algoritmo de distribución (Greedy / Best Fit simplificado)
-            qty_remaining = item.quantity
-            
-            for candidate in candidates:
-                if qty_remaining <= 0:
-                    break
-                
-                # Cuánto tomamos de este candidato
-                take = min(candidate.stock_quantity, qty_remaining)
-                
-                final_items_to_create.append({
-                    "product_id": candidate.id,
-                    "quantity": take,
-                    "price": item.price,
-                    "discount_percent": item.discount_percent
-                })
-                
-                qty_remaining -= take
-            
-            if qty_remaining > 0:
-                 # Esto no debería pasar si validamos total_available antes, 
-                 # a menos que haya condiciones de carrera muy agresivas, 
-                 # pero asumimos transacción serializable o bloqueo no explícito aquí.
-                 pass
+                db.add(movement)
+                db.flush()
 
-        # Calcular totales (basado en items originales para mantener coherencia visual inicial, 
-        # pero matemáticamente es igual a la suma de los desglosados)
-        subtotal, tax_amount, total = POSService.calculate_totals(sale_data.items)
-        
-        # Validar que la suma de pagos sea coherente con el total
-        total_payments = sum(p.amount for p in sale_data.payments)
-        
-        # Si hay una diferencia sospechosa (ej. el IVA), avisar
-        if abs(total_payments - total) > Decimal('1.00'):
-             print(f"ALERTA: Diferencia de montos. Recibido={total_payments}, Calculado={total}")
-             # Si el total recibido es MENOR que el calculado, podría ser que el frontend mandó precios netos
-             # Si el total recibido es IGUAL al calculado sin el tax_amount adicional, 
-             # entonces el frontend ya mandó precios con IVA.
-             # En ese caso, ajustamos el total para que la venta no falle.
-             if abs(total_payments - subtotal) < Decimal('0.10'):
-                  total = subtotal
-                  tax_amount = Decimal('0.00') # Los precios ya traen el IVA
-        
-        if abs(total_payments - total) > Decimal('1.00'):
-            raise HTTPException(
-                status_code=400,
-                detail=f"La suma de pagos ({total_payments}) no coincide con el total esperado ({total})"
-            )
-        
-        # Crear ticket en DRAFT
-        ticket = Ticket(
-            ticket_number=POSService.generate_ticket_number(db),
-            state=SaleState.DRAFT,
-            subtotal=subtotal,
-            tax_amount=tax_amount,
-            total_amount=total,
-            payment_method="MIXED" if len(sale_data.payments) > 1 else sale_data.payments[0].payment_method.value,
-            session_id=sale_data.session_id
-        )
-        db.add(ticket)
-        db.flush()  # Para obtener el ID
-        
-        # Crear items (Usando la lista desglozada)
-        for item_data in final_items_to_create:
-            item_subtotal = item_data["quantity"] * item_data["price"]
-            if item_data["discount_percent"] > 0:
-                item_subtotal *= (1 - item_data["discount_percent"] / 100)
-            
-            sale_item = SaleItem(
-                ticket_id=ticket.id,
-                product_id=item_data["product_id"], # ID de la ubicación específica
-                quantity=item_data["quantity"],
-                unit_price=item_data["price"],
-                discount_percent=item_data["discount_percent"],
-                subtotal=item_subtotal
-            )
-            db.add(sale_item)
-        
-        # Crear pagos
-        for payment_data in sale_data.payments:
-            # Mapeo seguro de método de pago
-            try:
-                pm_enum = PaymentMethod[payment_data.payment_method.name]
-            except (KeyError, AttributeError):
-                # Fallback por valor si el nombre falla
-                pm_val = payment_data.payment_method.value
-                pm_enum = next((m for m in PaymentMethod if m.value == pm_val), PaymentMethod.CASH)
+                final_items_to_create = []
 
-            payment = Payment(
-                ticket_id=ticket.id,
-                payment_method=pm_enum,
-                amount=payment_data.amount,
-                reference=payment_data.reference
-            )
-            db.add(payment)
-        
-        db.commit()
-        db.refresh(ticket)
-        return ticket
+                for item in sale_data.items:
+                    original_product = db.query(Product).filter(Product.id == item.product_id).first()
+                    if not original_product:
+                        raise HTTPException(status_code=404, detail=f"Producto {item.product_id} no encontrado")
+
+                    from sqlalchemy import or_
+                    # Bloqueo preventivo (with_for_update)
+                    candidates = db.query(Product).outerjoin(Product.location).filter(
+                        Product.barcode == original_product.barcode,
+                        Product.stock_quantity > 0,
+                        or_(StorageLocation.id == None, StorageLocation.name != "Pasillo Mermas")
+                    ).with_for_update(of=Product).order_by(Product.stock_quantity.desc()).all()
+
+                    total_available = sum(p.stock_quantity for p in candidates)
+
+                    if total_available < item.quantity:
+                        raise HTTPException(
+                            status_code=400, 
+                            detail=f"Stock insuficiente para {original_product.name}. Total disponible: {total_available}"
+                        )
+
+                    qty_remaining = item.quantity
+
+                    for candidate in candidates:
+                        if qty_remaining <= 0:
+                            break
+
+                        take = min(Decimal(str(candidate.stock_quantity)), Decimal(str(qty_remaining)))
+                        
+                        # Descuento en la base de datos
+                        stock_before = candidate.stock_quantity
+                        candidate.stock_quantity -= take
+                        stock_after = candidate.stock_quantity
+
+                        mov_item = InventoryMovementItem(
+                            movement_id=movement.id,
+                            product_id=candidate.id,
+                            quantity=-take,
+                            stock_before=stock_before,
+                            stock_after=stock_after
+                        )
+                        db.add(mov_item)
+
+                        final_items_to_create.append({
+                            "product_id": candidate.id,
+                            "quantity": take,
+                            "price": Decimal(str(item.price)),
+                            "discount_percent": Decimal(str(item.discount_percent)) if item.discount_percent else Decimal('0')
+                        })
+
+                        qty_remaining -= take
+
+                subtotal, tax_amount, total = POSService.calculate_totals(sale_data.items)
+                total_payments = sum(Decimal(str(p.amount)) for p in sale_data.payments)
+
+                if abs(total_payments - total) > Decimal('1.00'):
+                    if abs(total_payments - subtotal) < Decimal('0.10'):
+                        total = subtotal
+                        tax_amount = Decimal('0.00')
+
+                if abs(total_payments - total) > Decimal('1.00'):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"La suma de pagos ({total_payments}) no coincide con el total esperado ({total})"
+                    )
+
+                ticket = Ticket(
+                    ticket_number=POSService.generate_ticket_number(db),
+                    state=SaleState.DRAFT,
+                    subtotal=subtotal,
+                    tax_amount=tax_amount,
+                    total_amount=total,
+                    payment_method="MIXED" if len(sale_data.payments) > 1 else sale_data.payments[0].payment_method.value,
+                    session_id=sale_data.session_id
+                )
+                db.add(ticket)
+                db.flush()
+
+                for item_data in final_items_to_create:
+                    item_qty = Decimal(str(item_data["quantity"]))
+                    item_price = Decimal(str(item_data["price"]))
+                    item_discount = Decimal(str(item_data["discount_percent"]))
+
+                    item_subtotal = item_qty * item_price
+                    if item_discount > 0:
+                        item_subtotal *= (Decimal('1') - (item_discount / Decimal('100')))
+                    
+                    sale_item = SaleItem(
+                        ticket_id=ticket.id,
+                        product_id=item_data["product_id"],
+                        quantity=item_qty,
+                        unit_price=item_price,
+                        discount_percent=item_discount,
+                        subtotal=item_subtotal
+                    )
+                    db.add(sale_item)
+
+                for payment_data in sale_data.payments:
+                    try:
+                        pm_enum = PaymentMethod[payment_data.payment_method.name]
+                    except (KeyError, AttributeError):
+                        pm_val = payment_data.payment_method.value
+                        pm_enum = next((m for m in PaymentMethod if m.value == pm_val), PaymentMethod.CASH)
+
+                    payment = Payment(
+                        ticket_id=ticket.id,
+                        payment_method=pm_enum,
+                        amount=payment_data.amount,
+                        reference=payment_data.reference
+                    )
+                    db.add(payment)
+
+                # Assign movement ticket_id
+                movement.ticket_id = ticket.id
+
+            db.commit()
+            db.refresh(ticket)
+            return ticket
+        except HTTPException:
+            db.rollback()
+            raise
+        except Exception as e:
+            db.rollback()
+            from sqlalchemy.exc import SQLAlchemyError
+            if isinstance(e, SQLAlchemyError):
+                print(f"Database error during sale: {e}")
+            raise HTTPException(status_code=500, detail="Error de concurrencia o base de datos al realizar la venta. Verifica el stock e intenta de nuevo.")
+
     
     @staticmethod
     def validate_sale(db: Session, ticket_id: int) -> Ticket:
@@ -336,20 +354,72 @@ class POSService:
         db.add(movement)
         db.flush()
         
-        # Registrar items del movimiento para trazabilidad (sin actualizar stock_quantity aún)
+        # Registrar items del movimiento Y actualizar stock en tiempo real
         for item in refund_data.items:
             product = db.query(Product).filter(Product.id == item.product_id).first()
             if product:
-                # La cantidad en el movimiento es positiva si regresa, negativa si es merma/pérdida
-                quantity_for_mov = item.quantity if refund_data.return_to_stock else -item.quantity
-                
-                movement_item = InventoryMovementItem(
-                    movement_id=movement.id,
-                    product_id=product.id,
-                    quantity=quantity_for_mov,
-                    stock_before=product.stock_quantity,
-                    stock_after=product.stock_quantity  # No cambia el stock real en DB hasta cierre
-                )
+                stock_before = product.stock_quantity
+
+                if refund_data.return_to_stock:
+                    # ── REINGRESO AL STOCK ───────────────────────────────────────
+                    # Sumamos la cantidad devuelta al producto original
+                    product.stock_quantity += item.quantity
+                    stock_after = product.stock_quantity
+
+                    movement_item = InventoryMovementItem(
+                        movement_id=movement.id,
+                        product_id=product.id,
+                        quantity=item.quantity,         # positivo = entra al stock
+                        stock_before=stock_before,
+                        stock_after=stock_after
+                    )
+                else:
+                    # ── MERMA (no regresa al stock útil) ────────────────────────
+                    # Buscamos o creamos el Pasillo Mermas
+                    merma_location = db.query(StorageLocation).filter(
+                        StorageLocation.name == "Pasillo Mermas"
+                    ).first()
+                    if not merma_location:
+                        merma_location = StorageLocation(name="Pasillo Mermas")
+                        db.add(merma_location)
+                        db.flush()
+
+                    # Buscamos si ya hay un "twin" del producto en merma
+                    merma_product = db.query(Product).filter(
+                        Product.barcode == product.barcode,
+                        Product.location_id == merma_location.id
+                    ).first()
+
+                    if not merma_product:
+                        # Creamos gemelo en Pasillo Mermas con stock inicial 0
+                        merma_product = Product(
+                            name=product.name,
+                            barcode=product.barcode,
+                            price=product.price,
+                            cost=product.cost,
+                            uom=product.uom,
+                            product_type=product.product_type,
+                            category_id=product.category_id,
+                            location_id=merma_location.id,
+                            stock_quantity=0,
+                            is_active=True
+                        )
+                        db.add(merma_product)
+                        db.flush()
+
+                    # Movemos al Pasillo Mermas (stock_quantity del original NO cambia
+                    # porque ya fue descontado al vender, solo registramos el destino)
+                    merma_product.stock_quantity += item.quantity
+                    stock_after = stock_before  # El stock original no cambia en merma
+
+                    movement_item = InventoryMovementItem(
+                        movement_id=movement.id,
+                        product_id=product.id,
+                        quantity=-item.quantity,         # negativo = sale como merma
+                        stock_before=stock_before,
+                        stock_after=stock_after
+                    )
+
                 db.add(movement_item)
         
         # Marcar ticket original como reembolsado
