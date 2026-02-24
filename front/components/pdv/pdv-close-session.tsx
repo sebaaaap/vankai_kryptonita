@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import type { PosSession } from "./pdv-types"
+import { toNum } from "@/lib/utils-numbers"
 import {
   XCircle,
   CheckCircle2,
@@ -67,7 +68,8 @@ export function PdvCloseSession({
 
     processedOrders.forEach(o => {
       const type = o.paymentMethod?.type
-      const amount = o.total || 0
+      // Castear a Number porque Numeric(12,2) de Postgres llega como string en JSON
+      const amount = Number(o.total) || 0
 
       // Contamos como "orden" solo las ventas originales (monto positivo)
       if (amount > 0) totalOrdersCount++
@@ -86,7 +88,8 @@ export function PdvCloseSession({
     })
 
     const totalSales = cashSales + cardSales + transferSales
-    const openingBalance = session?.openingBalance || 0
+    // Castear openingBalance también porque viene de Numeric(12,2) → string
+    const openingBalance = Number(session?.openingBalance) || 0
     const expectedCash = openingBalance + cashSales
 
     return {
@@ -151,7 +154,7 @@ export function PdvCloseSession({
                 </div>
                 <div className="rounded-lg bg-muted/50 p-3">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Ventas Totales</p>
-                  <p className="text-lg font-black text-foreground">${stats.totalSales.toFixed(2)}</p>
+                  <p className="text-lg font-black text-foreground">${toNum(stats.totalSales).toFixed(2)}</p>
                 </div>
               </div>
 
@@ -163,26 +166,26 @@ export function PdvCloseSession({
                     {getPaymentIcon("cash")}
                     <span>Efectivo</span>
                   </div>
-                  <span className="font-bold text-foreground">${stats.cashSales.toFixed(2)}</span>
+                  <span className="font-bold text-foreground">${toNum(stats.cashSales).toFixed(2)}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     {getPaymentIcon("card")}
                     <span>Tarjeta</span>
                   </div>
-                  <span className="font-bold text-foreground">${stats.cardSales.toFixed(2)}</span>
+                  <span className="font-bold text-foreground">${toNum(stats.cardSales).toFixed(2)}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     {getPaymentIcon("transfer")}
                     <span>Transferencia</span>
                   </div>
-                  <span className="font-bold text-foreground">${stats.transferSales.toFixed(2)}</span>
+                  <span className="font-bold text-foreground">${toNum(stats.transferSales).toFixed(2)}</span>
                 </div>
                 {stats.totalRefunds > 0 && (
                   <div className="flex items-center justify-between text-xs border-t border-dashed border-border pt-2">
                     <span className="text-destructive">Reembolsos</span>
-                    <span className="font-bold text-destructive">-${stats.totalRefunds.toFixed(2)}</span>
+                    <span className="font-bold text-destructive">-${toNum(stats.totalRefunds).toFixed(2)}</span>
                   </div>
                 )}
               </div>
@@ -194,10 +197,10 @@ export function PdvCloseSession({
                     <Calculator className="h-4 w-4 text-primary" />
                     <span>Efectivo esperado en caja</span>
                   </div>
-                  <span className="text-base font-black text-primary">${stats.expectedCash.toFixed(2)}</span>
+                  <span className="text-base font-black text-primary">${toNum(stats.expectedCash).toFixed(2)}</span>
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  Apertura (${stats.openingBalance.toFixed(2)}) + Ventas efectivo (${stats.cashSales.toFixed(2)})
+                  Apertura (${toNum(stats.openingBalance).toFixed(2)}) + Ventas efectivo (${toNum(stats.cashSales).toFixed(2)})
                 </p>
               </div>
 
@@ -302,11 +305,11 @@ export function PdvCloseSession({
                 </div>
                 <div className="flex items-center justify-between px-4 py-2.5 text-xs">
                   <span className="text-muted-foreground">Ventas totales</span>
-                  <span className="font-bold text-foreground">${stats.totalSales.toFixed(2)}</span>
+                  <span className="font-bold text-foreground">${toNum(stats.totalSales).toFixed(2)}</span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-2.5 text-xs">
                   <span className="text-muted-foreground">Efectivo esperado</span>
-                  <span className="font-bold text-foreground">${stats.expectedCash.toFixed(2)}</span>
+                  <span className="font-bold text-foreground">${toNum(stats.expectedCash).toFixed(2)}</span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-2.5 text-xs">
                   <span className="text-muted-foreground">Efectivo contado</span>

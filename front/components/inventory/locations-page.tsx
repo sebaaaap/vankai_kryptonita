@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import api from '@/lib/api';
 
 interface Location {
-    id: number;
+    id: string;
     name: string;
     path: string;
     allows_multiple_products: boolean;
@@ -14,7 +14,7 @@ interface Location {
 }
 
 interface ProductInfo {
-    id: number;
+    id: string;
     name: string;
     barcode: string;
     stock: number;
@@ -69,7 +69,7 @@ export function LocationsPage() {
         try {
             await api.post('/locations/', {
                 name: form.name,
-                parent_id: form.parent_id ? parseInt(form.parent_id) : null,
+                parent_id: form.parent_id ? form.parent_id : null,
                 allows_multiple_products: form.allows_multiple_products,
             });
             setForm({ name: "", parent_id: "", allows_multiple_products: true });
@@ -93,7 +93,7 @@ export function LocationsPage() {
         }
     };
 
-    const getFlatOptions = (nodes: Location[], list: { id: number; path: string }[] = []) => {
+    const getFlatOptions = (nodes: Location[], list: { id: string; path: string }[] = []) => {
         nodes.forEach((node) => {
             list.push({ id: node.id, path: node.path });
             if (node.children) getFlatOptions(node.children, list);
@@ -174,7 +174,7 @@ export function LocationsPage() {
         return 'text-red-700 bg-red-50 border-red-200';
     };
 
-    const handleDeleteProduct = async (e: React.MouseEvent, productId: number) => {
+    const handleDeleteProduct = async (e: React.MouseEvent, productId: string) => {
         e.stopPropagation();
         if (!selectedLocation) return;
 

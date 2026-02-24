@@ -4,6 +4,7 @@ import type { OrderLine, NumpadMode } from "./pdv-types"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
+import { toNum } from "@/lib/utils-numbers"
 import {
   Trash2,
   ShoppingBag,
@@ -116,7 +117,7 @@ export function PdvOrderPanel({
                     {line.product.name}
                   </p>
                   <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <span>${line.unitPrice.toFixed(2)} c/u</span>
+                    <span>${toNum(line.unitPrice).toFixed(2)} c/u</span>
                     {line.discount > 0 && (
                       <Badge variant="destructive" className="h-4 rounded px-1 text-[9px]">
                         -{line.discount}%
@@ -133,7 +134,7 @@ export function PdvOrderPanel({
                 {/* Price + Delete */}
                 <div className="flex flex-col items-end gap-1">
                   <span className="text-sm font-bold text-foreground">
-                    ${line.subtotal.toFixed(2)}
+                    ${toNum(line.subtotal).toFixed(2)}
                   </span>
                   <button
                     type="button"

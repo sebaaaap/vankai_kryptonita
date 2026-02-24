@@ -7,7 +7,7 @@ interface User {
     username: string;
     full_name: string | null;
     role: 'admin' | 'vendedor' | 'inventario';
-    id: number;
+    id: string;
 }
 
 interface AuthContextType {
@@ -84,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const userResponse = await fetch(`${API_BASE}/auth/me`, {
                 headers: {
                     'Authorization': `Bearer ${data.access_token}`,
+                    'X-Tenant-ID': 'default',
                 },
             });
 

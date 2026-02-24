@@ -12,13 +12,15 @@ const api = axios.create({
     },
 });
 
-// Request Interceptor: Attach JWT Token
+// Request Interceptor: Attach JWT Token + Tenant Header
 api.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem("auth_token");
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
+        // Multi-tenant: always send schema header, "default" for local/single-tenant
+        config.headers["X-Tenant-ID"] = "default";
         return config;
     },
     (error) => {
@@ -43,7 +45,12 @@ api.interceptors.response.use(
             // Validation Error
             const detail = error.response.data?.detail;
             const message = Array.isArray(detail)
-                ? detail.map((d: any) => d.msg).join(", ")
+                ? detail.map((d: any) => {
+                    if (d.msg.includes("valid uuid")) {
+                        return "UUID Inválido o corrupto (" + d.loc?.[1] + ")";
+                    }
+                    return d.msg;
+                }).join(", ")
                 : detail || "Error de validación";
             toast.error(message);
         } else if (status === 500) {

@@ -10,14 +10,14 @@ import { apiService } from "@/services/apiService";
 import api from "@/lib/api";
 
 interface LocationDetail {
-    id: number;
-    location_id: number;
+    id: string;
+    location_id: string;
     location_path: string;
     stock: number;
 }
 
 interface Product {
-    id: number;
+    id: string;
     name: string;
     barcode: string;
     price: number;
@@ -27,20 +27,20 @@ interface Product {
     stock_quantity: number;
     uom: string;
     internal_reference?: string;
-    category_id?: number;
+    category_id?: string;
     locations: LocationDetail[];
-    location_id?: number;
+    location_id?: string;
 }
 
 interface Location {
-    id: number;
+    id: string;
     name: string;
     path: string;
     allows_multiple_products: boolean;
 }
 
 interface Category {
-    id: number;
+    id: string;
     name: string;
     color?: string;
 }
@@ -52,7 +52,7 @@ export function ProductsPage() {
     const [locations, setLocations] = useState<Location[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingId, setEditingId] = useState<number | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
 
     const [formData, setFormData] = useState({
@@ -157,7 +157,7 @@ export function ProductsPage() {
         setIsModalOpen(true);
     };
 
-    const handleDelete = async (id: number) => {
+    const handleDelete = async (id: string) => {
         if (!confirm("¿Estás seguro de eliminar este producto?")) return;
         try {
             await api.delete(`/products/${id}`);
@@ -174,8 +174,8 @@ export function ProductsPage() {
             ...formData,
             price: parseFloat(formData.price) || 0,
             cost: parseFloat(formData.cost) || 0,
-            location_id: formData.location_id ? parseInt(formData.location_id) : null,
-            category_id: formData.category_id ? parseInt(formData.category_id) : null,
+            location_id: formData.location_id ? formData.location_id : null,
+            category_id: formData.category_id ? formData.category_id : null,
         };
 
         try {
@@ -268,7 +268,7 @@ export function ProductsPage() {
                                         <div className="w-9 h-9 bg-muted rounded-xl flex items-center justify-center text-base group-hover:bg-card transition-colors">
                                             {product.product_type === "SERVICE"
                                                 ? "⚙️"
-                                                : product.category_id === 1
+                                                : product.category_id === "1"
                                                     ? "🥤"
                                                     : "📦"}
                                         </div>

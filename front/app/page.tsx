@@ -34,6 +34,7 @@ import { apiService } from "@/services/apiService"
 import { PaymentMethod as ApiPaymentMethod } from "@/types/api"
 import { useAuth } from "@/contexts/AuthContext"
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
+import { toNum } from "@/lib/utils-numbers"
 
 function createEmptyOrder(): Order {
   return {
@@ -174,10 +175,10 @@ export default function AppPage() {
       return {
         id: String(p.id),
         name: p.name,
-        price: p.price,
+        price: toNum(p.price),
         categoryId: catId,
         barcode: p.barcode,
-        stock: (p as any).total_stock || (p as any).stock_quantity || 0,
+        stock: toNum((p as any).total_stock || (p as any).stock_quantity || 0),
         tax: 19,
         color: categoryColor,
         unit: p.uom || "un"
@@ -196,24 +197,37 @@ export default function AppPage() {
 
     return base.map(p => {
       // Stock Proyectado = Stock DB - Ventas Sesión + Devoluciones Reingresadas
-      const sessionSold = paidOrders.reduce((acc, order) => {
-        const line = order.lines.find(l => String(l.product.id) === String(p.id))
-        if (!line) return acc
-        if (line.quantity > 0) return acc + line.quantity
-        if (line.quantity < 0 && order.returnToStock) return acc + line.quantity
-        return acc
+      const sessionSold = (paidOrders || []).reduce((acc, order) => {
+        // MUY IMPORTANTE: Comparar por BARCODE, no por ID.
+        // El stock en el punto de venta es agregado por barcode, pero la venta
+        // física puede haber usado una ubicación (ID) específica.
+        const linesForProduct = (order.lines || []).filter(l => l.product.barcode === p.barcode)
+
+        let subtotalLines = 0
+        linesForProduct.forEach(line => {
+          const qty = toNum(line.quantity)
+          if (qty > 0) {
+            subtotalLines += qty
+          } else if (qty < 0 && order.returnToStock) {
+            // Es un reembolso y vuelve a stock, por lo que su cantidad < 0 suma de vuelta al stock disponible
+            // OJO: subtotalLines es lo que ESTA SESION HA VENDIDO, así que un reembolso DEVUELVE stock,
+            // por tanto, hace que sessionSold SEA MENOR (al sumar un negativo a las ventas).
+            subtotalLines += qty // qty is negative, so adding it actually subtracts from sessionSold, which means more valid stock available
+          }
+        })
+
+        return acc + subtotalLines
       }, 0)
 
-      const lineInCart = orders[currentOrderIndex]?.lines.find(l => String(l.product.id) === String(p.id))
-      const cartQty = lineInCart ? lineInCart.quantity : 0
+      const lineInCart = orders[currentOrderIndex]?.lines.find(l => l.product.barcode === p.barcode)
+      const cartQty = lineInCart ? toNum(lineInCart.quantity) : 0
 
       return {
         ...p,
-        stock: Math.max(0, p.stock - sessionSold - cartQty)
+        stock: Math.max(0, toNum(p.stock) - sessionSold - cartQty)
       }
     })
   }, [mappedProducts, selectedCategoryId, searchQuery, orders, currentOrderIndex, paidOrders])
-
 
   const updateCurrentOrder = useCallback(
     (updater: (order: Order) => Order) => {
@@ -240,7 +254,7 @@ export default function AppPage() {
         const order = { ...updated[orderIndex] }
         if (!order) return prev
 
-        const existing = order.lines.find((l) => String(l.product.id) === String(product.id))
+        const existing = order.lines.find((l) => l.product.barcode === product.barcode)
         let newLines: OrderLine[]
 
         if (existing) {
@@ -373,10 +387,12 @@ export default function AppPage() {
                 const dbStock = productMain ? productMain.stock : 0
 
                 const sessionSold = paidOrders.reduce((acc, order) => {
-                  const line = order.lines.find(sl => String(sl.product.id) === String(l.product.id))
+                  const line = order.lines.find(sl => String(sl.product.barcode) === String(l.product.barcode))
                   if (!line) return acc
                   if (line.quantity > 0) return acc + line.quantity
-                  if (line.quantity < 0 && order.returnToStock) return acc + line.quantity
+                  if (line.quantity < 0 && order.returnToStock) {
+                    return acc + line.quantity // Negativo, así que resta de la cantidad "vendida"
+                  }
                   return acc
                 }, 0)
 
@@ -480,26 +496,36 @@ export default function AppPage() {
         try {
           const sales = await apiService.getSalesBySession(activeSession.id)
 
-          const restoredOrders: Order[] = sales.map(sale => {
+          const restoredOrders: Order[] = (sales || []).map(sale => {
             const mappedLines: OrderLine[] = (sale.items || []).map(item => {
-              const apiProd = apiProducts.find(p => p.id === item.product_id)
+              // Buscar producto por ID directo O por ID de una de sus ubicaciones (aggregated)
+              const apiProd = apiProducts?.find(p =>
+                p.id === item.product_id ||
+                (p as any).locations?.some((loc: any) => loc.id === item.product_id)
+              )
+
+              if (!apiProd) {
+                console.warn(`Producto ${item.product_id} no encontrado en la lista actual de productos.`);
+              }
+
               const mappedProduct: Product = {
                 id: String(item.product_id),
                 name: apiProd?.name || `Producto #${item.product_id}`,
-                price: item.unit_price,
+                price: toNum(item.unit_price),
                 categoryId: apiProd?.category || String(apiProd?.category_id) || "all",
-                stock: (apiProd as any)?.total_stock || (apiProd as any)?.stock_quantity || 0,
+                stock: toNum((apiProd as any)?.total_stock || (apiProd as any)?.stock_quantity || 0),
                 tax: 19,
                 color: "bg-card border-border",
-                unit: apiProd?.uom || "un"
+                unit: apiProd?.uom || "un",
+                barcode: apiProd?.barcode || ""
               }
               return {
                 id: `hydrated-${item.id}`,
                 product: mappedProduct,
-                quantity: item.quantity,
-                unitPrice: item.unit_price,
-                discount: item.discount_percent,
-                subtotal: item.subtotal
+                quantity: toNum(item.quantity),
+                unitPrice: toNum(item.unit_price),
+                discount: toNum(item.discount_percent),
+                subtotal: toNum(item.subtotal)
               }
             })
 
@@ -512,13 +538,13 @@ export default function AppPage() {
               id: String(sale.id),
               lines: mappedLines,
               customer: null, // Si el backend no devuelve cliente, queda null
-              total: sale.total_amount,
-              tax: sale.tax_amount,
-              subtotal: sale.subtotal,
+              total: toNum(sale.total_amount),
+              tax: toNum(sale.tax_amount),
+              subtotal: toNum(sale.subtotal),
               date: new Date(sale.date_created || sale.date_validated || Date.now()),
               status: sale.state === "reembolsado" ? "refunded" : "paid",
               paymentMethod: method,
-              amountPaid: sale.total_amount,
+              amountPaid: toNum(sale.total_amount),
               returnToStock: sale.return_to_stock,
               originalTicketId: sale.original_ticket_id ? String(sale.original_ticket_id) : undefined,
             } as Order
@@ -553,8 +579,9 @@ export default function AppPage() {
 
         // Si estamos incrementando, validamos stock
         if (delta > 0 && !isService) {
-          const prodInGrid = filteredProducts.find(p => p.id === line.product.id)
-          const availableToIncrement = prodInGrid ? prodInGrid.stock : 0
+          // Buscamos en el grid por barcode para ver el stock consolidado
+          const prodInGrid = filteredProducts.find(p => p.barcode === line.product.barcode)
+          const availableToIncrement = prodInGrid ? toNum(prodInGrid.stock) : 0
 
           if (availableToIncrement < delta) {
             stockError = true
@@ -632,60 +659,75 @@ export default function AppPage() {
       }
 
       const order = ordersRef.current[currentOrderIndexRef.current]
+      if (!order || order.lines.length === 0) {
+        toast.error("No hay productos en el pedido.")
+        return
+      }
+
+      // El backend valida que sum(payments) == total calculado.
+      // El total de la venta es lo que se cobra (sin vuelto).
+      // El vuelto (amountPaid - order.total) es solo para mostrar en pantalla.
+      const saleTotal = Number(order.total)
 
       const saleData = {
         session_id: activeSession.id,
         items: order.lines.map(line => ({
-          product_id: parseInt(line.product.id),
-          quantity: line.quantity,
-          price: line.unitPrice,
-          discount_percent: line.discount
+          product_id: line.product.id,
+          quantity: Number(line.quantity),
+          price: Number(line.unitPrice),       // cast por si viene como Decimal string
+          discount_percent: Number(line.discount)
         })),
         payments: [{
           payment_method:
             method.type === "cash" ? ApiPaymentMethod.CASH :
               method.type === "card" ? ApiPaymentMethod.CARD :
                 ApiPaymentMethod.TRANSFER,
-          amount: amountPaid
+          amount: saleTotal  // ← monto real de la venta, NO el que pagó el cliente
         }]
       }
 
       try {
-        const response = await apiService.createSale(saleData)
-        await apiService.validateSale(response.id)
+        // Paso 1: Crear venta en DRAFT
+        const draft = await apiService.createSale(saleData)
 
-        toast.success(`Venta #${response.ticket_number} completada`)
+        // Paso 2: Validar (reserva inventario, crea trazabilidad)
+        await apiService.validateSale(draft.id)
+
+        // Paso 3: Marcar como PAID
+        const finalTicket = await apiService.markAsPaid(draft.id)
+
+        toast.success(`Venta #${finalTicket.ticket_number} completada ✓`)
 
         mutate("/pos/products")
         mutate("/sessions/active")
 
         const paidOrder: Order = {
           ...order,
-          id: String(response.id),
+          id: String(finalTicket.id),
           status: "paid",
           paymentMethod: method,
-          amountPaid,
-          customer: selectedCustomer, // AQUÍ SE RESCATA EL CLIENTE
+          amountPaid,   // guardamos lo que pagó el cliente para calcular vuelto en historial
+          customer: selectedCustomer,
         }
 
         setPaidOrders((prev) => [paidOrder, ...prev])
         setShowPayment(false)
 
+        // Limpiar el pedido pagado y crear uno nuevo vacío
         setTimeout(() => {
           const paidIdx = currentOrderIndexRef.current
           setOrders((prev) => {
             const remaining = prev.filter((_, i) => i !== paidIdx)
-            if (remaining.length === 0) {
-              return [createEmptyOrder()]
-            }
-            return remaining
+            return remaining.length === 0 ? [createEmptyOrder()] : remaining
           })
           setCurrentOrderIndex(0)
           setSelectedLineId(null)
           setNumpadBuffer("")
         }, 500)
       } catch (error: any) {
-        toast.error("Error al procesar la venta")
+        const detail = error?.response?.data?.detail
+        console.error("Error al procesar la venta:", error)
+        toast.error(detail ? `Error: ${detail}` : "Error al procesar la venta")
       }
     },
     [activeSession, selectedCustomer],
@@ -701,7 +743,7 @@ export default function AppPage() {
   )
 
   const handleConfirmRefund = async (refundData: {
-    items: { product_id: number; quantity: number; price: number }[]
+    items: { product_id: string; quantity: number; price: number }[]
     returnToStock: boolean
     reason: string
   }) => {
@@ -709,7 +751,7 @@ export default function AppPage() {
 
     try {
       const response = await apiService.createRefund({
-        original_ticket_id: parseInt(refundOrder.id),
+        original_ticket_id: refundOrder.id,
         items: refundData.items,
         refund_reason: refundData.reason,
         return_to_stock: refundData.returnToStock
@@ -734,26 +776,27 @@ export default function AppPage() {
             product: {
               id: String(item.product_id),
               name: apiProd?.name || `Producto #${item.product_id}`,
-              price: item.unit_price,
+              price: toNum(item.unit_price),
               categoryId: apiProd?.category || String(apiProd?.category_id) || "all",
-              stock: (apiProd as any)?.total_stock || (apiProd as any)?.stock_quantity || 0,
+              stock: toNum((apiProd as any)?.total_stock || (apiProd as any)?.stock_quantity || 0),
               tax: 19,
-              color: "bg-card border-border"
+              color: "bg-card border-border",
+              barcode: apiProd?.barcode || ""
             },
-            quantity: item.quantity,
-            unitPrice: item.unit_price,
-            discount: item.discount_percent,
-            subtotal: item.subtotal
+            quantity: toNum(item.quantity),
+            unitPrice: toNum(item.unit_price),
+            discount: toNum(item.discount_percent),
+            subtotal: toNum(item.subtotal)
           }
         }),
-        customer: refundOrder.customer, // SE MANTIENE EL CLIENTE ORIGINAL
-        total: cn.total_amount,
-        tax: cn.tax_amount,
-        subtotal: cn.subtotal,
+        customer: refundOrder.customer,
+        total: toNum(cn.total_amount),
+        tax: toNum(cn.tax_amount),
+        subtotal: toNum(cn.subtotal),
         date: new Date(cn.date_created),
         status: "refunded",
         paymentMethod: refundOrder.paymentMethod,
-        amountPaid: cn.total_amount,
+        amountPaid: toNum(cn.total_amount),
         returnToStock: cn.return_to_stock,
         originalTicketId: String(cn.original_ticket_id)
       }

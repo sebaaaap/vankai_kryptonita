@@ -24,13 +24,14 @@ import {
 } from "lucide-react"
 import type { Order, OrderLine } from "./pdv-types"
 import { cn } from "@/lib/utils"
+import { toNum } from "@/lib/utils-numbers"
 
 interface PdvRefundModalProps {
     open: boolean
     order: Order | null
     onClose: () => void
     onConfirm: (refundData: {
-        items: { product_id: number; quantity: number; price: number }[]
+        items: { product_id: string; quantity: number; price: number }[]
         returnToStock: boolean
         reason: string
     }) => Promise<void>
@@ -81,10 +82,10 @@ export function PdvRefundModal({ open, order, onClose, onConfirm }: PdvRefundMod
     }
 
     const refundTotal = order.lines.reduce((acc, line) => {
-        const qty = selectedItems[line.id] || 0
+        const qty = toNum(selectedItems[line.id] || 0)
         // Use unitPrice, or product price, or derive from subtotal as fallback
-        const price = line.unitPrice || line.product.price || (line.subtotal / line.quantity) || 0
-        const discount = line.discount || 0
+        const price = toNum(line.unitPrice || line.product.price || (toNum(line.subtotal) / toNum(line.quantity)) || 0)
+        const discount = toNum(line.discount || 0)
         return acc + (qty * price * (1 - discount / 100))
     }, 0) * 1.19 // Including Tax (IVA 19%)
 
@@ -94,7 +95,7 @@ export function PdvRefundModal({ open, order, onClose, onConfirm }: PdvRefundMod
             .map(line => {
                 const price = line.unitPrice || line.product.price || (line.subtotal / line.quantity) || 0
                 return {
-                    product_id: parseInt(line.product.id),
+                    product_id: line.product.id,
                     quantity: selectedItems[line.id],
                     price: price,
                     discount_percent: line.discount || 0
@@ -157,7 +158,7 @@ export function PdvRefundModal({ open, order, onClose, onConfirm }: PdvRefundMod
 
                                         <div className="flex-1 min-w-0">
                                             <p className="font-bold text-slate-800 text-sm truncate">{line.product.name}</p>
-                                            <p className="text-xs text-slate-500">Comprado: {line.quantity} unid. x ${(line.unitPrice || 0).toLocaleString()}</p>
+                                            <p className="text-xs text-slate-500">Comprado: {toNum(line.quantity)} unid. x ${toNum(line.unitPrice || 0).toLocaleString()}</p>
                                         </div>
 
                                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>

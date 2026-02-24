@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { Order } from "./pdv-types"
+import { toNum } from "@/lib/utils-numbers"
 import {
   Clock,
   Search,
@@ -161,7 +162,7 @@ export function PdvOrderHistory({
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <span className={`text-sm font-bold ${order.total < 0 ? "text-destructive" : "text-foreground"}`}>
-                          ${(order.total || 0).toFixed(2)}
+                          ${toNum(order.total).toFixed(2)}
                         </span>
                         <div className="flex items-center gap-1 text-muted-foreground">
                           {getPaymentIcon(order.paymentMethod?.type)}
@@ -240,11 +241,11 @@ export function PdvOrderHistory({
                           <tr key={line.id}>
                             <td className="py-2.5 font-medium text-foreground pr-3">{line.product.name}</td>
                             <td className="py-2.5 text-center text-muted-foreground">{line.quantity}</td>
-                            <td className="py-2.5 text-right text-muted-foreground">${(line.unitPrice || 0).toFixed(2)}</td>
+                            <td className="py-2.5 text-right text-muted-foreground">${toNum(line.unitPrice).toFixed(2)}</td>
                             <td className="py-2.5 text-right text-muted-foreground">
                               {line.discount > 0 ? `${line.discount}%` : "-"}
                             </td>
-                            <td className="py-2.5 text-right font-semibold text-foreground">${(line.subtotal || 0).toFixed(2)}</td>
+                            <td className="py-2.5 text-right font-semibold text-foreground">${toNum(line.subtotal).toFixed(2)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -257,16 +258,16 @@ export function PdvOrderHistory({
                   <div className="space-y-1">
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Subtotal</span>
-                      <span>${(selectedOrder.subtotal || 0).toFixed(2)}</span>
+                      <span>${toNum(selectedOrder.subtotal).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>IVA</span>
-                      <span>${(selectedOrder.tax || 0).toFixed(2)}</span>
+                      <span>${toNum(selectedOrder.tax).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between border-t border-dashed border-border pt-2">
                       <span className="text-sm font-bold text-foreground">Total</span>
                       <span className={`text-lg font-black ${selectedOrder.total < 0 ? "text-destructive" : "text-primary"}`}>
-                        ${(selectedOrder.total || 0).toFixed(2)}
+                        ${toNum(selectedOrder.total).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -280,7 +281,7 @@ export function PdvOrderHistory({
                       </div>
                       {selectedOrder.amountPaid && selectedOrder.paymentMethod.type === "cash" && (
                         <span className="text-muted-foreground">
-                          Recibido: ${(selectedOrder.amountPaid || 0).toFixed(2)} | Cambio: ${((selectedOrder.amountPaid || 0) - (selectedOrder.total || 0)).toFixed(2)}
+                          Recibido: ${toNum(selectedOrder.amountPaid).toFixed(2)} | Cambio: ${(toNum(selectedOrder.amountPaid) - toNum(selectedOrder.total)).toFixed(2)}
                         </span>
                       )}
                     </div>
@@ -297,7 +298,7 @@ export function PdvOrderHistory({
                       <div className="flex-1">
                         <h4 className="text-sm font-bold text-destructive">Confirmar Reembolso</h4>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Se creara una nota de credito por ${(selectedOrder.total || 0).toFixed(2)} y se devolvera el monto al cliente.
+                          Se creara una nota de credito por ${toNum(selectedOrder.total).toFixed(2)} y se devolvera el monto al cliente.
                           Los productos se reingresaran al inventario.
                         </p>
                         <div className="mt-3 flex gap-2">

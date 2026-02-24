@@ -31,12 +31,17 @@ export const apiService = {
         return response.data;
     },
 
-    async validateSale(ticketId: number): Promise<SaleResponse> {
+    async validateSale(ticketId: string): Promise<SaleResponse> {
         const response = await api.post(`/pos/sales/${ticketId}/validate`);
         return response.data;
     },
 
-    async getSalesBySession(sessionId: number): Promise<SaleResponse[]> {
+    async markAsPaid(ticketId: string): Promise<SaleResponse> {
+        const response = await api.post(`/pos/sales/${ticketId}/pay`);
+        return response.data;
+    },
+
+    async getSalesBySession(sessionId: string): Promise<SaleResponse[]> {
         const response = await api.get(`/pos/sales/session/${sessionId}`);
         return response.data;
     },
@@ -62,7 +67,7 @@ export const apiService = {
         return response.data;
     },
 
-    async closeSession(sessionId: number, finalCash: number, notes?: string): Promise<CashSessionResponse> {
+    async closeSession(sessionId: string, finalCash: number, notes?: string): Promise<CashSessionResponse> {
         const response = await api.post(`/sessions/${sessionId}/validate_and_close`, {
             final_cash: finalCash,
             notes
@@ -126,23 +131,23 @@ export const apiService = {
         return response.data;
     },
 
-    async updateCustomer(id: number, data: any): Promise<any> {
+    async updateCustomer(id: string, data: any): Promise<any> {
         const response = await api.put(`/customers/${id}`, data);
         return response.data;
     },
 
-    async getCustomerHistory(id: number): Promise<any> {
+    async getCustomerHistory(id: string): Promise<any> {
         const response = await api.get(`/customers/${id}/history`);
         return response.data;
     },
 
     // Vehicles
-    async addVehicle(customerId: number, data: any): Promise<any> {
+    async addVehicle(customerId: string, data: any): Promise<any> {
         const response = await api.post(`/customers/${customerId}/vehicles`, data);
         return response.data;
     },
 
-    async updateVehicle(id: number, data: any): Promise<any> {
+    async updateVehicle(id: string, data: any): Promise<any> {
         const response = await api.put(`/customers/vehicles/${id}`, data);
         return response.data;
     }

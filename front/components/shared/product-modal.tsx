@@ -4,13 +4,13 @@ import React from "react";
 import { Package, X, Plus, Barcode } from "lucide-react";
 
 interface Category {
-  id: number;
+  id: string;
   name: string;
   color?: string;
 }
 
 interface Location {
-  id: number;
+  id: string;
   name: string;
   path: string;
   allows_multiple_products: boolean;
@@ -34,10 +34,10 @@ interface ProductModalProps {
   onSubmit: (e: React.FormEvent) => void;
   formData: ProductFormData;
   setFormData: React.Dispatch<React.SetStateAction<ProductFormData>>;
-  editingId: number | null;
+  editingId: string | null;
   categories: Category[];
   locations: Location[];
-  occupiedLocationIds: number[];
+  occupiedLocationIds: string[];
 }
 
 export function ProductModal({

@@ -5,13 +5,13 @@ import { Plus, ShoppingCart, X } from "lucide-react";
 import api from "@/lib/api";
 
 interface Supplier {
-    id: number;
+    id: string;
     name: string;
     tax_id?: string;
 }
 
 interface Product {
-    id: number;
+    id: string;
     name: string;
     barcode: string;
     cost: number;
@@ -20,20 +20,20 @@ interface Product {
 }
 
 interface PurchaseItem {
-    product_id: number;
+    product_id: string;
     quantity: number;
     unit_cost: number;
 }
 
 interface PurchaseItemResponse extends PurchaseItem {
-    id: number;
+    id: string;
     subtotal: number;
 }
 
 interface Purchase {
-    id: number;
+    id: string;
     date_created: string;
-    supplier_id?: number;
+    supplier_id?: string;
     invoice_number?: string;
     subtotal_net: number;
     tax_amount: number;
@@ -107,7 +107,7 @@ export function PurchasesList() {
         setItems([
             ...items,
             {
-                product_id: parseInt(newItem.product_id),
+                product_id: newItem.product_id,
                 quantity: parseInt(newItem.quantity),
                 unit_cost: parseFloat(newItem.unit_cost),
             },
@@ -133,7 +133,7 @@ export function PurchasesList() {
         }
         try {
             const res = await api.post("/purchases/", {
-                supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
+                supplier_id: formData.supplier_id ? formData.supplier_id : null,
                 invoice_number: formData.invoice_number || null,
                 notes: formData.notes || null,
                 items,
@@ -146,7 +146,7 @@ export function PurchasesList() {
         }
     };
 
-    const confirmPurchase = async (id: number) => {
+    const confirmPurchase = async (id: string) => {
         setIsProcessing(true);
         try {
             await api.post(`/purchases/${id}/confirm`);
@@ -162,7 +162,7 @@ export function PurchasesList() {
         }
     };
 
-    const cancelPurchase = async (id: number) => {
+    const cancelPurchase = async (id: string) => {
         if (!confirm("¿Cancelar esta compra?")) return;
         try {
             await api.post(`/purchases/${id}/cancel`);
@@ -181,10 +181,10 @@ export function PurchasesList() {
         setIsCreating(false);
     };
 
-    const getProductName = (id: number) =>
+    const getProductName = (id: string) =>
         products.find((p) => p.id === id)?.name || `Producto #${id}`;
 
-    const getSupplierName = (id?: number) => {
+    const getSupplierName = (id?: string) => {
         if (!id) return "Sin proveedor";
         return suppliers.find((s) => s.id === id)?.name || `Proveedor #${id}`;
     };
@@ -382,7 +382,7 @@ export function PurchasesList() {
                                             className="form-input"
                                             value={newItem.product_id}
                                             onChange={(e) => {
-                                                const product = products.find((p) => p.id === parseInt(e.target.value));
+                                                const product = products.find((p) => p.id === e.target.value);
                                                 setNewItem({
                                                     ...newItem,
                                                     product_id: e.target.value,

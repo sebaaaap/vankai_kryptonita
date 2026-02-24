@@ -14,13 +14,13 @@ export enum PaymentMethod {
 }
 
 export interface Product {
-    id: number;
+    id: string;
     name: string;
     barcode: string;
     price: number;
     cost: number;
     category?: string;
-    category_id?: number;
+    category_id?: string;
     image_path?: string;
     internal_reference?: string;
     uom: string;
@@ -29,7 +29,7 @@ export interface Product {
 }
 
 export interface SaleItemCreate {
-    product_id: number;
+    product_id: string;
     quantity: number;
     price: number;
     discount_percent: number;
@@ -44,12 +44,12 @@ export interface PaymentCreate {
 export interface SaleCreate {
     items: SaleItemCreate[];
     payments: PaymentCreate[];
-    session_id?: number;
+    session_id?: string;
 }
 
 export interface SaleItemResponse {
-    id: number;
-    product_id: number;
+    id: string;
+    product_id: string;
     quantity: number;
     unit_price: number;
     discount_percent: number;
@@ -57,7 +57,7 @@ export interface SaleItemResponse {
 }
 
 export interface SaleResponse {
-    id: number;
+    id: string;
     ticket_number: string;
     date_created: string;
     date_validated?: string;
@@ -66,15 +66,15 @@ export interface SaleResponse {
     tax_amount: number;
     total_amount: number;
     payment_method: string;
-    session_id?: number;
+    session_id?: string;
     return_to_stock: boolean;
-    original_ticket_id?: number;
+    original_ticket_id?: string;
     items: SaleItemResponse[];
     payments: any[];
 }
 
 export interface CashSessionResponse {
-    id: number;
+    id: string;
     name: string;
     start_time: string;
     end_time?: string;
@@ -91,7 +91,7 @@ export interface CashSessionResponse {
 }
 
 export interface CategoryResponse {
-    id: number;
+    id: string;
     name: string;
     code?: string;
     color?: string;

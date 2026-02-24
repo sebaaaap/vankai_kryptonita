@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { PosSession, SessionSummary, Order } from "./pdv-types"
+import { toNum } from "@/lib/utils-numbers"
 import { categories } from "./pdv-data"
 import {
   BarChart3,
@@ -239,11 +240,10 @@ export function PdvSessionReport({ session, onClose }: PdvSessionReportProps) {
                 setActiveTab(tab.id)
                 setSelectedOrderId(null)
               }}
-              className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-semibold transition-colors ${
-                activeTab === tab.id
+              className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-semibold transition-colors ${activeTab === tab.id
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               <Icon className="h-3.5 w-3.5" />
               {tab.label}
@@ -281,7 +281,7 @@ function ResumenTab({ summary, session }: { summary: SessionSummary; session: Po
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard
             label="Ventas Totales"
-            value={`$${summary.totalSales.toFixed(2)}`}
+            value={`$${toNum(summary.totalSales).toFixed(2)}`}
             icon={TrendingUp}
             accent="text-success"
             bgAccent="bg-success/10"
@@ -295,14 +295,14 @@ function ResumenTab({ summary, session }: { summary: SessionSummary; session: Po
           />
           <KpiCard
             label="Ticket Promedio"
-            value={`$${summary.avgTicket.toFixed(2)}`}
+            value={`$${toNum(summary.avgTicket).toFixed(2)}`}
             icon={Receipt}
             accent="text-secondary"
             bgAccent="bg-secondary/10"
           />
           <KpiCard
             label="Reembolsos"
-            value={`$${summary.totalRefunds.toFixed(2)}`}
+            value={`$${toNum(summary.totalRefunds).toFixed(2)}`}
             icon={TrendingDown}
             accent="text-destructive"
             bgAccent="bg-destructive/10"
@@ -313,15 +313,15 @@ function ResumenTab({ summary, session }: { summary: SessionSummary; session: Po
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Ventas Netas</p>
-            <p className="text-xl font-black text-foreground">${summary.netSales.toFixed(2)}</p>
+            <p className="text-xl font-black text-foreground">${toNum(summary.netSales).toFixed(2)}</p>
           </div>
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">IVA Recaudado</p>
-            <p className="text-xl font-black text-foreground">${summary.totalTax.toFixed(2)}</p>
+            <p className="text-xl font-black text-foreground">${toNum(summary.totalTax).toFixed(2)}</p>
           </div>
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Saldo Inicial</p>
-            <p className="text-xl font-black text-foreground">${session.openingBalance.toFixed(2)}</p>
+            <p className="text-xl font-black text-foreground">${toNum(session.openingBalance).toFixed(2)}</p>
           </div>
         </div>
 
@@ -342,7 +342,7 @@ function ResumenTab({ summary, session }: { summary: SessionSummary; session: Po
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-semibold text-foreground">{pm.method}</span>
-                      <span className="text-xs font-bold text-foreground">${pm.total.toFixed(2)}</span>
+                      <span className="text-xs font-bold text-foreground">${toNum(pm.total).toFixed(2)}</span>
                     </div>
                     <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                       <div
@@ -372,7 +372,7 @@ function ResumenTab({ summary, session }: { summary: SessionSummary; session: Po
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-semibold text-foreground">{cat.categoryName}</span>
-                      <span className="text-xs font-bold text-foreground">${cat.total.toFixed(2)}</span>
+                      <span className="text-xs font-bold text-foreground">${toNum(cat.total).toFixed(2)}</span>
                     </div>
                     <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                       <div
@@ -401,7 +401,7 @@ function ResumenTab({ summary, session }: { summary: SessionSummary; session: Po
             <div className="flex items-end gap-2 h-32">
               {summary.hourlyBreakdown.map((h) => (
                 <div key={h.hour} className="flex flex-1 flex-col items-center gap-1">
-                  <span className="text-[9px] font-semibold text-foreground">${h.total.toFixed(0)}</span>
+                  <span className="text-[9px] font-semibold text-foreground">${toNum(h.total).toFixed(0)}</span>
                   <div
                     className="w-full rounded-t-md bg-primary/80 transition-all min-h-[4px]"
                     style={{ height: `${(h.total / maxHourly) * 100}%` }}
@@ -475,11 +475,10 @@ function PedidosTab({
               key={f}
               type="button"
               onClick={() => setFilter(f)}
-              className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all ${
-                filter === f
+              className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all ${filter === f
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted"
-              }`}
+                }`}
             >
               {f === "all" ? "Todos" : f === "paid" ? "Pagados" : "Reembolsos"}
               {" "}
@@ -501,15 +500,13 @@ function PedidosTab({
                   key={order.id}
                   type="button"
                   onClick={() => onSelectOrder(order.id)}
-                  className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
-                    selectedOrderId === order.id
+                  className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${selectedOrderId === order.id
                       ? "bg-primary/5 border-l-2 border-l-primary"
                       : "hover:bg-muted/50"
-                  }`}
+                    }`}
                 >
-                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                    order.status === "refunded" ? "bg-destructive/10" : "bg-success/10"
-                  }`}>
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${order.status === "refunded" ? "bg-destructive/10" : "bg-success/10"
+                    }`}>
                     {order.status === "refunded" ? (
                       <RotateCcw className="h-4 w-4 text-destructive" />
                     ) : (
@@ -529,10 +526,9 @@ function PedidosTab({
                       {order.customer?.name ?? "Publico en General"} &middot; {formatTime(order.date)}
                     </p>
                   </div>
-                  <span className={`text-sm font-bold ${
-                    order.total < 0 ? "text-destructive" : "text-foreground"
-                  }`}>
-                    {order.total < 0 ? "-" : ""}${Math.abs(order.total).toFixed(2)}
+                  <span className={`text-sm font-bold ${order.total < 0 ? "text-destructive" : "text-foreground"
+                    }`}>
+                    {order.total < 0 ? "-" : ""}${toNum(Math.abs(order.total)).toFixed(2)}
                   </span>
                   <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40" />
                 </button>
@@ -593,11 +589,11 @@ function PedidosTab({
                     <tr key={line.id}>
                       <td className="py-2.5 font-medium text-foreground pr-3">{line.product.name}</td>
                       <td className="py-2.5 text-center text-muted-foreground">{line.quantity}</td>
-                      <td className="py-2.5 text-right text-muted-foreground">${line.unitPrice.toFixed(2)}</td>
+                      <td className="py-2.5 text-right text-muted-foreground">${toNum(line.unitPrice).toFixed(2)}</td>
                       <td className="py-2.5 text-right text-muted-foreground">
                         {line.discount > 0 ? `${line.discount}%` : "-"}
                       </td>
-                      <td className="py-2.5 text-right font-semibold text-foreground">${line.subtotal.toFixed(2)}</td>
+                      <td className="py-2.5 text-right font-semibold text-foreground">${toNum(line.subtotal).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -607,16 +603,16 @@ function PedidosTab({
               <div className="rounded-lg bg-muted/50 p-4 space-y-1.5">
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Subtotal</span>
-                  <span>${selectedOrder.subtotal.toFixed(2)}</span>
+                  <span>${toNum(selectedOrder.subtotal).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>IVA</span>
-                  <span>${selectedOrder.tax.toFixed(2)}</span>
+                  <span>${toNum(selectedOrder.tax).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between border-t border-dashed border-border pt-2">
                   <span className="text-sm font-bold text-foreground">Total</span>
                   <span className={`text-lg font-black ${selectedOrder.total < 0 ? "text-destructive" : "text-primary"}`}>
-                    {selectedOrder.total < 0 ? "-" : ""}${Math.abs(selectedOrder.total).toFixed(2)}
+                    {selectedOrder.total < 0 ? "-" : ""}${toNum(Math.abs(selectedOrder.total)).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -662,7 +658,7 @@ function PagosTab({ summary, orders }: { summary: SessionSummary; orders: Order[
                   <p className="text-[11px] text-muted-foreground">{pm.count} transacciones</p>
                 </div>
               </div>
-              <p className="text-2xl font-black text-foreground">${pm.total.toFixed(2)}</p>
+              <p className="text-2xl font-black text-foreground">${toNum(pm.total).toFixed(2)}</p>
               <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full rounded-full bg-primary"
@@ -698,9 +694,8 @@ function PagosTab({ summary, orders }: { summary: SessionSummary; orders: Order[
             ) : (
               paidOrders.map((order) => (
                 <div key={order.id} className="flex items-center gap-4 px-5 py-3">
-                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                    order.total < 0 ? "bg-destructive/10" : "bg-success/10"
-                  }`}>
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${order.total < 0 ? "bg-destructive/10" : "bg-success/10"
+                    }`}>
                     {order.total < 0 ? (
                       <RotateCcw className="h-4 w-4 text-destructive" />
                     ) : (
@@ -717,7 +712,7 @@ function PagosTab({ summary, orders }: { summary: SessionSummary; orders: Order[
                     </p>
                   </div>
                   <span className={`text-sm font-bold ${order.total < 0 ? "text-destructive" : "text-foreground"}`}>
-                    {order.total < 0 ? "-" : "+"}${Math.abs(order.total).toFixed(2)}
+                    {order.total < 0 ? "-" : "+"}${toNum(Math.abs(order.total)).toFixed(2)}
                   </span>
                 </div>
               ))
@@ -758,7 +753,7 @@ function DetalleTab({ summary }: { summary: SessionSummary }) {
                     <td className="px-5 py-2.5 text-muted-foreground">{i + 1}</td>
                     <td className="py-2.5 font-medium text-foreground">{p.productName}</td>
                     <td className="py-2.5 text-center text-muted-foreground">{p.quantity}</td>
-                    <td className="py-2.5 text-right font-bold text-foreground pr-5">${p.total.toFixed(2)}</td>
+                    <td className="py-2.5 text-right font-bold text-foreground pr-5">${toNum(p.total).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -805,7 +800,7 @@ function DetalleTab({ summary }: { summary: SessionSummary }) {
                   <tr key={cat.categoryId} className="hover:bg-muted/30 transition-colors">
                     <td className="px-5 py-2.5 font-medium text-foreground">{cat.categoryName}</td>
                     <td className="py-2.5 text-center text-muted-foreground">{cat.count}</td>
-                    <td className="py-2.5 text-right font-bold text-foreground">${cat.total.toFixed(2)}</td>
+                    <td className="py-2.5 text-right font-bold text-foreground">${toNum(cat.total).toFixed(2)}</td>
                     <td className="py-2.5 text-right pr-5 text-muted-foreground">
                       {summary.totalSales > 0 ? ((cat.total / summary.totalSales) * 100).toFixed(1) : 0}%
                     </td>

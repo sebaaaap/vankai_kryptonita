@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Plus, Trash2, Edit, X, Users, Building2, Phone, Mail, FileText } from "lucide-react";
 
 interface Supplier {
-    id: number;
+    id: string;
     name: string;
     tax_id?: string;
     email?: string;
@@ -18,7 +18,7 @@ const API_BASE = "http://localhost:8000/api/v1";
 export function SuppliersPage() {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [isCreating, setIsCreating] = useState(false);
-    const [editingId, setEditingId] = useState<number | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [formData, setFormData] = useState({
         name: "",
@@ -102,7 +102,7 @@ export function SuppliersPage() {
         }
     };
 
-    const handleDelete = async (id: number) => {
+    const handleDelete = async (id: string) => {
         if (!confirm("¿Estás seguro de eliminar este proveedor?")) return;
         try {
             const res = await fetch(`${API_BASE}/suppliers/${id}`, { method: "DELETE" });

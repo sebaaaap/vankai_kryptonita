@@ -6,7 +6,7 @@ import api from '@/lib/api';
 import { toast } from 'sonner';
 
 interface User {
-    id: number;
+    id: string;
     username: string;
     full_name: string;
     email: string;
@@ -83,7 +83,7 @@ export function UserManagement() {
         }
     };
 
-    const handleDelete = async (id: number) => {
+    const handleDelete = async (id: string) => {
         if (confirm('¿Estás seguro de eliminar este usuario?')) {
             try {
                 await api.delete(`/users/${id}`);

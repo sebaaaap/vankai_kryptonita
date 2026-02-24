@@ -20,14 +20,14 @@ import api from "@/lib/api";
 const API_BASE = "http://localhost:8000/api/v1";
 
 interface ProductLocationDetail {
-    id: number; // ID de la instancia de producto en esa ubicación
-    location_id: number;
+    id: string; // ID de la instancia de producto en esa ubicación
+    location_id: string;
     location_path: string;
     stock: number;
 }
 
 interface Product {
-    id: number;
+    id: string;
     name: string;
     barcode: string;
     total_stock: number;
@@ -36,13 +36,13 @@ interface Product {
 }
 
 interface FlatLocation {
-    id: number;
+    id: string;
     path: string;
     allows_multiple_products: boolean;
 }
 
 interface Category {
-    id: number;
+    id: string;
     name: string;
     color?: string;
 }
@@ -60,7 +60,7 @@ const flattenLocations = (nodes: any[], list: FlatLocation[] = []): FlatLocation
 };
 
 // Mapa de Ocupación: location_id -> { producto, barcode }
-type OccupancyMap = Record<number, { name: string; barcode: string }>;
+type OccupancyMap = Record<string, { name: string; barcode: string }>;
 
 function OperationsTab() {
     const [products, setProducts] = useState<Product[]>([]);
@@ -114,7 +114,7 @@ function OperationsTab() {
     };
 
     const handleProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const prodId = parseInt(e.target.value);
+        const prodId = e.target.value;
         const prod = products.find(p => p.id === prodId) || null;
         setSelectedParentProduct(prod);
 
@@ -143,10 +143,10 @@ function OperationsTab() {
             await api.post('/inventory/adjustments', {
                 type: operationType,
                 reason: reason || "Operación manual de inventario",
-                to_location_id: operationType === "INTERNAL_TRANSFER" ? parseInt(toLocationId) : null,
+                to_location_id: operationType === "INTERNAL_TRANSFER" ? toLocationId : null,
                 items: [
                     {
-                        product_id: parseInt(selectedSourceInstanceId),
+                        product_id: selectedSourceInstanceId,
                         quantity: parseFloat(quantity),
                     },
                 ],
@@ -422,7 +422,7 @@ function CategoriesTab() {
         } catch { }
     };
 
-    const handleDelete = async (id: number) => {
+    const handleDelete = async (id: string) => {
         if (!confirm("¿Deseas eliminar esta categoría?")) return;
         try {
             await api.delete(`/categories/${id}`);
