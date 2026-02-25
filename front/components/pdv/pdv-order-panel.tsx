@@ -216,19 +216,9 @@ export function PdvOrderPanel({
 
         <div className="flex gap-2">
           <Button
-            onClick={onCargarOt}
-            variant="outline"
-            className="flex-1 rounded-xl py-6 text-sm font-bold border-2 border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
-            size="lg"
-          >
-            <Car className="w-5 h-5 mr-2" />
-            Cargar OT
-          </Button>
-
-          <Button
             onClick={onPay}
             disabled={lines.length === 0}
-            className="flex-1 rounded-xl py-6 text-sm font-bold shadow-lg shadow-primary/25"
+            className="w-full rounded-xl py-6 text-sm font-bold shadow-lg shadow-primary/25"
             size="lg"
           >
             Pagar ${total.toFixed(2)}

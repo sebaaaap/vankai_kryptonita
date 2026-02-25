@@ -66,40 +66,9 @@ export function Sidebar() {
                 </Link>
             </div>
 
-            {/* User Info */}
-            {user && (
-                <div className="px-4 py-3 border-b bg-muted/30">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                            <span className="text-xs font-bold text-primary">
-                                {user.username.charAt(0).toUpperCase()}
-                            </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-foreground truncate">
-                                {user.full_name || user.username}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                                {user.role === 'admin' ? 'Administrador' : 'Vendedor'}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             <div className="flex-1 overflow-auto py-4">
                 <nav className="grid items-start px-4 text-sm font-medium gap-1">
-                    {/* Link directo al POS para todos */}
-                    <Link
-                        href="/"
-                        className={cn(
-                            "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:bg-muted",
-                            pathname === "/" && "bg-muted text-primary font-semibold"
-                        )}
-                    >
-                        <Monitor size={18} />
-                        Ventas (POS)
-                    </Link>
 
                     {filteredMenuItems.map((item) => {
                         const Icon = item.icon;
@@ -131,6 +100,25 @@ export function Sidebar() {
                         <Settings size={18} />
                         Configuración
                     </Link>
+                )}
+
+                {/* User info encima de cerrar sesión */}
+                {user && (
+                    <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-muted/40">
+                        <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                            <span className="text-xs font-bold text-primary">
+                                {user.username.charAt(0).toUpperCase()}
+                            </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-foreground truncate">
+                                {user.full_name || user.username}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                {user.role === 'admin' ? 'Administrador' : 'Vendedor'}
+                            </p>
+                        </div>
+                    </div>
                 )}
 
                 {/* Botón de cerrar sesión para todos */}

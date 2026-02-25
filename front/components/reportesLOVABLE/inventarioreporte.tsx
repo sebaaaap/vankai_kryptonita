@@ -238,38 +238,40 @@ export default function InventoryReports() {
                 <div className="space-y-6">
                     <Card className="p-5">
                         <h3 className="text-sm font-semibold mb-6">Distribución por Categoría</h3>
-                        <ChartContainer
-                            config={{
-                                value: {
-                                    label: "Cantidad",
-                                    color: "hsl(var(--chart-1))"
-                                }
-                            }}
-                            className="h-[250px] w-full"
-                        >
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={donut_data}
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        paddingAngle={2}
-                                        dataKey="value"
-                                    >
-                                        {donut_data.map((entry: any, index: number) => (
-                                            <Cell key={`cell-${index}`} fill={entry.fill} strokeWidth={0} />
-                                        ))}
-                                    </Pie>
-                                    <ChartTooltip content={<ChartTooltipContent />} />
-                                    <Legend iconType="circle" layout="horizontal" verticalAlign="bottom" wrapperStyle={{ fontSize: "11px", paddingTop: "20px" }} />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </ChartContainer>
-                        {/* Center Text */}
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ marginTop: "-180px" }}>
-                            <div className="text-center">
-                                <span className="text-2xl font-bold block">{donut_data.reduce((acc: number, cur: any) => acc + cur.value, 0)}</span>
-                                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Items</span>
+                        <div className="relative">
+                            <ChartContainer
+                                config={{
+                                    value: {
+                                        label: "Cantidad",
+                                        color: "hsl(var(--chart-1))"
+                                    }
+                                }}
+                                className="h-[250px] w-full"
+                            >
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={donut_data}
+                                            innerRadius={60}
+                                            outerRadius={80}
+                                            paddingAngle={2}
+                                            dataKey="value"
+                                        >
+                                            {donut_data.map((entry: any, index: number) => (
+                                                <Cell key={`cell-${index}`} fill={entry.fill} strokeWidth={0} />
+                                            ))}
+                                        </Pie>
+                                        <ChartTooltip content={<ChartTooltipContent />} />
+                                        <Legend iconType="circle" layout="horizontal" verticalAlign="bottom" wrapperStyle={{ fontSize: "11px", paddingTop: "20px" }} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </ChartContainer>
+                            {/* Center Text — positioned relative to chart wrapper */}
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none pb-10">
+                                <div className="text-center">
+                                    <span className="text-2xl font-bold block">{donut_data.reduce((acc: number, cur: any) => acc + cur.value, 0)}</span>
+                                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Items</span>
+                                </div>
                             </div>
                         </div>
                     </Card>
