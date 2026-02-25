@@ -62,14 +62,34 @@ export const apiService = {
         }
     },
 
-    async openSession(initial_cash: number, notes?: string): Promise<CashSessionResponse> {
-        const response = await api.post("/sessions/open", { initial_cash, notes });
+    async getRegisters(availableOnly: boolean = false): Promise<any[]> {
+        const response = await api.get("/sessions/registers", { params: { available_only: availableOnly } });
         return response.data;
     },
 
-    async closeSession(sessionId: string, finalCash: number, notes?: string): Promise<CashSessionResponse> {
-        const response = await api.post(`/sessions/${sessionId}/validate_and_close`, {
-            final_cash: finalCash,
+    async createRegister(data: any): Promise<any> {
+        const response = await api.post("/sessions/registers", data);
+        return response.data;
+    },
+
+    async updateRegister(id: string, data: any): Promise<any> {
+        const response = await api.put(`/sessions/registers/${id}`, data);
+        return response.data;
+    },
+
+    async deleteRegister(id: string): Promise<any> {
+        const response = await api.delete(`/sessions/registers/${id}`);
+        return response.data;
+    },
+
+    async openSession(opening_balance: number, cash_register_id: string, user_id: string, notes?: string): Promise<CashSessionResponse> {
+        const response = await api.post("/sessions/open", { opening_balance, cash_register_id, user_id, notes });
+        return response.data;
+    },
+
+    async closeSession(sessionId: string, closing_balance: number, notes?: string): Promise<CashSessionResponse> {
+        const response = await api.post(`/sessions/${sessionId}/close`, {
+            closing_balance,
             notes
         });
         return response.data;
@@ -149,6 +169,42 @@ export const apiService = {
 
     async updateVehicle(id: string, data: any): Promise<any> {
         const response = await api.put(`/customers/vehicles/${id}`, data);
+        return response.data;
+    },
+
+    // Quotes & OTs
+    async getQuotes(): Promise<any[]> {
+        const response = await api.get("/quotes");
+        return response.data;
+    },
+
+    async createQuote(data: any): Promise<any> {
+        const response = await api.post("/quotes", data);
+        return response.data;
+    },
+
+    async approveQuote(quoteId: string): Promise<any> {
+        const response = await api.post(`/quotes/${quoteId}/approve`);
+        return response.data;
+    },
+
+    async rejectQuote(quoteId: string): Promise<any> {
+        const response = await api.post(`/quotes/${quoteId}/reject`);
+        return response.data;
+    },
+
+    async getActiveWorkOrders(): Promise<any[]> {
+        const response = await api.get("/pos/active-orders");
+        return response.data;
+    },
+
+    async updateOtItemsDone(woId: string, items: { id: string; done: boolean }[]): Promise<any> {
+        const response = await api.patch(`/ot/${woId}/items`, { items });
+        return response.data;
+    },
+
+    async updateOtState(woId: string, state: string): Promise<any> {
+        const response = await api.patch(`/ot/${woId}/state`, { state });
         return response.data;
     }
 };

@@ -7,8 +7,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BusinessInfo } from './business-info';
 import { Customization } from './customization';
 import { UserManagement } from './user-management';
+import { CashRegisterManagement } from './cash-register-management';
+import { useAuth } from '@/contexts/AuthContext';
+import { Monitor } from 'lucide-react';
 
 export function SettingsPage() {
+    const { isAdmin } = useAuth();
     const [activeTab, setActiveTab] = useState('business');
 
     return (
@@ -50,8 +54,8 @@ export function SettingsPage() {
                             <button
                                 onClick={() => setActiveTab('business')}
                                 className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${activeTab === 'business'
-                                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
-                                        : 'text-muted-foreground hover:bg-muted font-medium'
+                                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                                    : 'text-muted-foreground hover:bg-muted font-medium'
                                     }`}
                             >
                                 <div className="flex items-center gap-3">
@@ -64,8 +68,8 @@ export function SettingsPage() {
                             <button
                                 onClick={() => setActiveTab('customization')}
                                 className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${activeTab === 'customization'
-                                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
-                                        : 'text-muted-foreground hover:bg-muted font-medium'
+                                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                                    : 'text-muted-foreground hover:bg-muted font-medium'
                                     }`}
                             >
                                 <div className="flex items-center gap-3">
@@ -76,13 +80,34 @@ export function SettingsPage() {
                             </button>
                         </nav>
 
+                        {isAdmin && (
+                            <>
+                                <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] mb-4 mt-8">Operaciones</h2>
+                                <nav className="space-y-1">
+                                    <button
+                                        onClick={() => setActiveTab('registers')}
+                                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${activeTab === 'registers'
+                                            ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                                            : 'text-muted-foreground hover:bg-muted font-medium'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <Monitor size={18} />
+                                            <span className="text-sm">Cajas y Terminales</span>
+                                        </div>
+                                        {activeTab === 'registers' && <ChevronRight size={14} />}
+                                    </button>
+                                </nav>
+                            </>
+                        )}
+
                         <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] mb-4 mt-8">Seguridad</h2>
                         <nav className="space-y-1">
                             <button
                                 onClick={() => setActiveTab('users')}
                                 className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${activeTab === 'users'
-                                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
-                                        : 'text-muted-foreground hover:bg-muted font-medium'
+                                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                                    : 'text-muted-foreground hover:bg-muted font-medium'
                                     }`}
                             >
                                 <div className="flex items-center gap-3">
@@ -134,6 +159,16 @@ export function SettingsPage() {
                                     <p className="text-sm text-muted-foreground mt-1">Administre quién tiene acceso y qué permisos posee cada colaborador.</p>
                                 </div>
                                 <UserManagement />
+                            </div>
+                        )}
+
+                        {activeTab === 'registers' && isAdmin && (
+                            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                <div className="mb-8">
+                                    <h2 className="text-2xl font-bold text-foreground">Gestión de Cajas</h2>
+                                    <p className="text-sm text-muted-foreground mt-1">Configure las terminales físicas para el control de efectivo en el PDV.</p>
+                                </div>
+                                <CashRegisterManagement />
                             </div>
                         )}
                     </div>

@@ -11,7 +11,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 
-export type ModuleId = "pdv" | "compras" | "inventario" | "ajustes" | "reportes"
+export type ModuleId = "pdv" | "compras" | "inventario" | "ajustes" | "reportes" | "clientes" | "taller"
 
 interface BackendDashboardProps {
   onNavigate: (module: ModuleId) => void
@@ -24,7 +24,6 @@ const modulesConfig = [
     description: "Caja registradora para ventas directas a clientes",
     icon: Monitor,
     color: "bg-primary",
-    stats: "Sesion activa",
     badge: "Abierto",
     roles: ["admin", "vendedor"],
   },
@@ -34,8 +33,7 @@ const modulesConfig = [
     description: "Gestion de ordenes de compra y proveedores",
     icon: ShoppingCart,
     color: "bg-secondary",
-    stats: "Ordenes pendientes",
-    badge: "3 nuevas",
+    badge: "",
     roles: ["admin"],
   },
   {
@@ -44,10 +42,20 @@ const modulesConfig = [
     description: "Control de stock, movimientos y almacenes",
     icon: Package,
     color: "bg-amber-600",
-    stats: "Productos registrados",
-    badge: "30 items",
+    badge: "",
     roles: ["admin"],
   },
+]
+
+const workshopConfig = [
+  {
+    id: "taller" as ModuleId,
+    name: "Taller Automotriz",
+    description: "Cotizaciones y Órdenes de Trabajo (OT)",
+    icon: Wrench,
+    color: "bg-blue-600",
+    roles: ["admin", "vendedor"],
+  }
 ]
 
 const quickLinksConfig = [
@@ -61,6 +69,7 @@ export function BackendDashboard({ onNavigate }: BackendDashboardProps) {
 
   const filteredModules = modulesConfig.filter(m => user && m.roles.includes(user.role));
   const filteredQuickLinks = quickLinksConfig.filter(l => user && l.roles.includes(user.role));
+  const filteredWorkshop = workshopConfig.filter(w => user && w.roles.includes(user.role));
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -108,7 +117,6 @@ export function BackendDashboard({ onNavigate }: BackendDashboardProps) {
             </p>
           </div>
 
-          {/* Modules Grid */}
           <div className={`grid grid-cols-1 gap-4 ${filteredModules.length > 2 ? 'md:grid-cols-3' : 'md:grid-cols-2'} mb-8`}>
             {filteredModules.map((mod) => {
               const Icon = mod.icon
@@ -123,9 +131,11 @@ export function BackendDashboard({ onNavigate }: BackendDashboardProps) {
                     <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${mod.color}`}>
                       <Icon className="h-6 w-6 text-primary-foreground" />
                     </div>
-                    <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-semibold text-muted-foreground">
-                      {mod.badge}
-                    </span>
+                    {mod.badge && (
+                      <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-semibold text-muted-foreground">
+                        {mod.badge}
+                      </span>
+                    )}
                   </div>
                   <h3 className="text-base font-bold text-foreground mb-1">{mod.name}</h3>
                   <p className="text-xs text-muted-foreground leading-relaxed mb-4">
@@ -139,6 +149,42 @@ export function BackendDashboard({ onNavigate }: BackendDashboardProps) {
               )
             })}
           </div>
+
+          {/* Workshop Details Level */}
+          {filteredWorkshop.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-sm font-bold text-foreground mb-3">Taller y Servicios</h3>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {filteredWorkshop.map((mod) => {
+                  const Icon = mod.icon
+                  return (
+                    <button
+                      key={mod.id}
+                      type="button"
+                      onClick={() => onNavigate(mod.id)}
+                      className="group flex flex-col rounded-2xl border border-border bg-card p-4 text-left transition-all hover:shadow-md hover:border-primary/30 active:scale-[0.98]"
+                    >
+                      <div className="flex items-center gap-4 mb-3">
+                        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${mod.color}`}>
+                          <Icon className="h-5 w-5 text-primary-foreground" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-foreground leading-tight">{mod.name}</h3>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {mod.description}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-auto flex items-center gap-1.5 text-[11px] font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span>Gestionar Órdenes</span>
+                        <ChevronRight className="h-3 w-3" />
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Quick Links */}
           {filteredQuickLinks.length > 0 && (

@@ -23,7 +23,7 @@ from app.schemas.pos import (
     QuickSaleCreate
 )
 from app.models.base import Product
-from app.api.deps import check_roles
+from app.api.deps import check_roles, require_active_session
 
 router = APIRouter()
 
@@ -78,7 +78,7 @@ def search_products(
 def create_sale(
     sale: SaleCreate, 
     db: Session = Depends(get_db_session),
-    current_user = Depends(check_roles(["admin", "vendedor"]))
+    active_session = Depends(require_active_session)
 ):
     """
     Crea una venta con pagos divididos (estado inicial)
@@ -97,6 +97,8 @@ def create_sale(
     """
 
     try:
+        # Aseguramos que la venta use la sesión activa verificada por la dependencia
+        sale.session_id = active_session.id
         print(f"DEBUG: create_sale payload: {sale.model_dump_json(indent=2)}")
         ticket = POSService.create_sale_draft(db, sale)
         
@@ -120,7 +122,7 @@ def create_sale(
 def create_quick_sale(
     sale: QuickSaleCreate, 
     db: Session = Depends(get_db_session),
-    current_user = Depends(check_roles(["admin", "vendedor"]))
+    active_session = Depends(require_active_session)
 ):
     """
     Endpoint simplificado para ventas rápidas (un solo método de pago)
@@ -128,6 +130,8 @@ def create_quick_sale(
     
     Para compatibilidad con el frontend actual
     """
+    # Aseguramos que la venta use la sesión activa
+    sale.session_id = active_session.id
     # Crear venta en DRAFT
     ticket = POSService.create_sale_draft(db, sale)
     

@@ -24,6 +24,7 @@ export interface Product {
     image_path?: string;
     internal_reference?: string;
     uom: string;
+    product_type: "STORABLE" | "SERVICE" | "CONSUMABLE";
     stock_quantity: number;
     is_active: boolean;
 }
@@ -73,21 +74,29 @@ export interface SaleResponse {
     payments: any[];
 }
 
-export interface CashSessionResponse {
+export interface CashRegisterResponse {
     id: string;
     name: string;
-    start_time: string;
-    end_time?: string;
-    initial_cash: number;
-    final_cash?: number;
-    expected_cash: number;
+    description?: string;
+    is_active: boolean;
+}
+
+export interface CashSessionResponse {
+    id: string;
+    user_id: string;
+    cash_register_id: string;
+    opened_at: string;
+    closed_at?: string;
+    status: "open" | "closed";
+    opening_balance: number;
+    closing_balance?: number;
+    expected_balance: number;
     difference: number;
     total_sales_cash: number;
     total_sales_card: number;
     total_sales_transfer: number;
-    is_open: boolean;
-    user_id?: string;
     notes?: string;
+    cash_register?: CashRegisterResponse;
 }
 
 export interface CategoryResponse {

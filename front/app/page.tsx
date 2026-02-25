@@ -14,6 +14,7 @@ import { PdvOrderPanel } from "@/components/pdv/pdv-order-panel"
 import { PdvPaymentModal } from "@/components/pdv/pdv-payment-modal"
 import { PdvOrderHistory } from "@/components/pdv/pdv-order-history"
 import { PdvCloseSession } from "@/components/pdv/pdv-close-session"
+import { PdvOtPaymentModal } from "@/components/pdv/pdv-ot-payment-modal"
 import { PdvOpenSession } from "@/components/pdv/pdv-open-session"
 import { PdvRefundModal } from "@/components/pdv/pdv-refund-modal"
 import { BackendDashboard } from "@/components/backend/backend-dashboard"
@@ -105,6 +106,7 @@ export default function AppPage() {
   const [paidOrders, setPaidOrders] = useState<Order[]>([])
   const [showOpenSession, setShowOpenSession] = useState(false)
   const [showRefund, setShowRefund] = useState(false)
+  const [showOtPayment, setShowOtPayment] = useState(false)
   const [refundOrder, setRefundOrder] = useState<Order | null>(null)
 
   // Search state
@@ -710,6 +712,14 @@ export default function AppPage() {
     [activeSession, selectedCustomer],
   )
 
+  const handleConfirmOtPayment = async (amount: number, method: string) => {
+    // LLamada pendiente a /ot/{id}/payments
+    // simulamos la interaccion
+    toast.success(`Abono a OT por $${amount.toLocaleString("es-CL")} registrado en caja.`)
+    setShowOtPayment(false)
+    mutate("/sessions/active")
+  }
+
   // Refund
   const handleRefund = useCallback(
     (originalOrder: Order) => {
@@ -818,6 +828,7 @@ export default function AppPage() {
     if (module === "compras") router.push("/compras")
     else if (module === "inventario") router.push("/inventario")
     else if (module === "ajustes" as any) router.push("/ajustes")
+    else if (module === "taller" as any) router.push("/quotes-ot")
     else if (module === "reportes") router.push("/dashboard")
     else if (module === "clientes" as any) setCurrentModule("clientes" as any)
     else setCurrentModule(module)
@@ -838,9 +849,9 @@ export default function AppPage() {
     }
   }
 
-  const handleConfirmOpenSession = async (initialCash: number, notes: string) => {
+  const handleConfirmOpenSession = async (initialCash: number, registerId: string, userId: string, notes: string) => {
     try {
-      await apiService.openSession(initialCash, notes)
+      await apiService.openSession(initialCash, registerId, userId, notes)
       toast.success("Sesión iniciada")
       setPaidOrders([])
       mutate("/sessions/active")
@@ -853,13 +864,13 @@ export default function AppPage() {
 
   const uiActiveSession = activeSession ? {
     id: String(activeSession.id),
-    name: activeSession.name,
-    openedAt: new Date(activeSession.start_time),
-    closedAt: activeSession.end_time ? new Date(activeSession.end_time) : null,
-    openedBy: activeSession.user_id || "admin",
-    status: (activeSession.is_open ? "open" : "closed") as any,
-    openingBalance: activeSession.initial_cash,
-    closingBalance: activeSession.final_cash || null,
+    name: `Terminal: ${activeSession.cash_register?.name || 'Caja Principal'}`,
+    openedAt: new Date(activeSession.opened_at),
+    closedAt: activeSession.closed_at ? new Date(activeSession.closed_at) : null,
+    openedBy: activeSession.user_id,
+    status: activeSession.status as any,
+    openingBalance: Number(activeSession.opening_balance),
+    closingBalance: Number(activeSession.closing_balance) || null,
     orders: paidOrders,
     notes: activeSession.notes || ""
   } : null
@@ -875,9 +886,16 @@ export default function AppPage() {
       ) : currentModule === "clientes" as any ? (
         <CustomersModule onBack={() => setCurrentModule("backend")} />
       ) : !activeSession?.id ? (
-        <div className="flex flex-col h-screen bg-[#f8fafc] items-center justify-center p-4 gap-6">
+        <div className="flex flex-col h-screen bg-[#f8fafc] items-center justify-center p-4 gap-4">
           <h1 className="text-4xl font-black">Punto de Venta</h1>
           <Button onClick={() => setShowOpenSession(true)} size="lg" className="h-20 w-full max-w-md text-xl font-bold bg-primary rounded-2xl">INICIAR JORNADA</Button>
+          <button
+            onClick={() => setCurrentModule("backend")}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium flex items-center gap-1.5 opacity-60 hover:opacity-100"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg>
+            Volver al Tablero
+          </button>
           <PdvOpenSession open={showOpenSession} onConfirm={handleConfirmOpenSession} />
         </div>
       ) : (
@@ -892,7 +910,7 @@ export default function AppPage() {
             onOpenHistory={() => setShowHistory(true)}
             onGoToBackend={() => setCurrentModule("backend")}
             onOpenCloseSession={() => setShowCloseSession(true)}
-            activeSessionName={activeSession?.name}
+            activeSessionName={uiActiveSession?.name}
             customersList={mappedApiCustomers}
             onCustomerCreated={() => mutate("/customers/")}
           />
@@ -924,10 +942,12 @@ export default function AppPage() {
               numpadMode={numpadMode}
               onNumpadModeChange={handleNumpadModeChange}
               onNumpadInput={handleNumpadInput}
+              onCargarOt={() => setShowOtPayment(true)}
             />
           </div>
 
           <PdvPaymentModal open={showPayment} onClose={() => setShowPayment(false)} total={currentOrder?.total || 0} onConfirmPayment={handleConfirmPayment} />
+          <PdvOtPaymentModal open={showOtPayment} onClose={() => setShowOtPayment(false)} onConfirm={handleConfirmOtPayment} />
           <PdvOrderHistory open={showHistory} onClose={() => setShowHistory(false)} paidOrders={paidOrders} onRefund={handleRefund} />
           {activeSession && <PdvCloseSession open={showCloseSession} onClose={() => setShowCloseSession(false)} session={uiActiveSession!} onConfirmClose={handleConfirmCloseSession} />}
           <PdvRefundModal open={showRefund} order={refundOrder} onClose={() => setShowRefund(false)} onConfirm={handleConfirmRefund} />

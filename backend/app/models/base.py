@@ -42,6 +42,18 @@ class SaleState(enum.Enum):
     REFUNDED = "reembolsado"
     CANCELLED = "cancelado"
 
+class QuoteState(enum.Enum):
+    DRAFT = "borrador"
+    SENT = "enviado"
+    APPROVED = "aprobado"
+    REJECTED = "rechazado"
+
+class WorkOrderState(enum.Enum):
+    OPEN = "abierta"
+    IN_PROGRESS = "en_progreso"
+    READY = "lista"
+    COMPLETED = "finalizada"
+
 class PaymentMethod(enum.Enum):
     CASH = "efectivo"
     CARD = "tarjeta"
@@ -107,26 +119,38 @@ class Product(BaseModel):
     sale_items = relationship("SaleItem", back_populates="product")
     purchase_items = relationship("PurchaseItem", back_populates="product")
 
+class CashRegister(BaseModel):
+    __tablename__ = "cash_registers"
+    name = Column(String, nullable=False, unique=True)
+    description = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    sessions = relationship("CashSession", back_populates="cash_register")
+
 class CashSession(BaseModel):
     __tablename__ = "cash_sessions"
     
-    name = Column(String, nullable=False)
-    start_time = Column(DateTime(timezone=True), default=func.now(), nullable=False)
-    end_time = Column(DateTime(timezone=True), nullable=True)
+    user_id = Column(String, nullable=False) # ID del usuario (vendedor)
+    cash_register_id = Column(UUID(as_uuid=True), ForeignKey("cash_registers.id"), nullable=False)
     
-    initial_cash = Column(Numeric(12, 2), default=0.0, nullable=False)
-    final_cash = Column(Numeric(12, 2), nullable=True)
-    expected_cash = Column(Numeric(12, 2), default=0.0)
+    opened_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    closed_at = Column(DateTime(timezone=True), nullable=True)
     
+    status = Column(String, default="open") # "open" or "closed"
+    
+    opening_balance = Column(Numeric(12, 2), default=0.0, nullable=False)
+    closing_balance = Column(Numeric(12, 2), nullable=True)
+    
+    # Campos acumuladores (para arqueo)
     total_sales_cash = Column(Numeric(12, 2), default=0.0)
     total_sales_card = Column(Numeric(12, 2), default=0.0)
     total_sales_transfer = Column(Numeric(12, 2), default=0.0)
+    expected_balance = Column(Numeric(12, 2), default=0.0) # Suma de ventas + apertura
     difference = Column(Numeric(12, 2), default=0.0)
     
-    user_id = Column(String, nullable=True)
-    is_open = Column(Boolean, default=True, nullable=False)
     notes = Column(Text, nullable=True)
     
+    cash_register = relationship("CashRegister", back_populates="sessions")
     tickets = relationship("Ticket", back_populates="session")
 
 class VehicleType(enum.Enum):
@@ -179,7 +203,7 @@ class Ticket(BaseModel):
     
     payment_method = Column(String, default="CASH")
     
-    session_id = Column(UUID(as_uuid=True), ForeignKey("cash_sessions.id"), nullable=True, index=True)
+    session_id = Column(UUID(as_uuid=True), ForeignKey("cash_sessions.id"), nullable=False, index=True)
     session = relationship("CashSession", back_populates="tickets")
     
     customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=True, index=True)
@@ -313,3 +337,96 @@ class User(BaseModel):
     full_name = Column(String, nullable=True)
     role = Column(Enum(UserRole), default=UserRole.vendedor, nullable=False)
     is_active = Column(Boolean, default=True)
+
+class Quote(BaseModel):
+    __tablename__ = "quotes"
+    
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False)
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id"), nullable=True)
+    total = Column(Numeric(12, 2), default=0.0)
+    mileage = Column(Numeric(12, 2), nullable=True)
+    state = Column(Enum(QuoteState), default=QuoteState.DRAFT, nullable=False)
+    
+    customer = relationship("Customer", backref="quotes")
+    vehicle = relationship("Vehicle", backref="quotes")
+    items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
+    work_order = relationship("WorkOrder", back_populates="quote", uselist=False)
+
+class QuoteItem(BaseModel):
+    __tablename__ = "quote_items"
+    
+    quote_id = Column(UUID(as_uuid=True), ForeignKey("quotes.id"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    quantity = Column(Numeric(12, 2), nullable=False)
+    unit_price = Column(Numeric(12, 2), nullable=False)
+    subtotal = Column(Numeric(12, 2), nullable=False)
+    
+    quote = relationship("Quote", back_populates="items")
+    product = relationship("Product")
+
+    @property
+    def product_name(self):
+        return self.product.name if self.product else "N/A"
+
+    @property
+    def product_type(self):
+        if not self.product or not self.product.product_type:
+            return "PRODUCTO"
+        return "SERVICIO" if self.product.product_type == ProductType.SERVICE else "PRODUCTO"
+
+class WorkOrder(BaseModel):
+    __tablename__ = "work_orders"
+    
+    quote_id = Column(UUID(as_uuid=True), ForeignKey("quotes.id"), nullable=True)
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False)
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id"), nullable=True)
+    
+    state = Column(Enum(WorkOrderState), default=WorkOrderState.OPEN, nullable=False)
+    mileage = Column(Numeric(12, 2), nullable=True) # kilometraje
+    notes = Column(Text, nullable=True)
+    assigned_user_id = Column(String, nullable=True) # mecanico asignado
+    
+    quote = relationship("Quote", back_populates="work_order")
+    customer = relationship("Customer")
+    vehicle = relationship("Vehicle")
+    items = relationship("WorkOrderItem", back_populates="work_order", cascade="all, delete-orphan")
+    payments = relationship("WorkOrderPayment", back_populates="work_order", cascade="all, delete-orphan")
+
+    @property
+    def total_amount(self):
+        return sum(item.subtotal for item in self.items)
+
+class WorkOrderItem(BaseModel):
+    __tablename__ = "work_order_items"
+    
+    work_order_id = Column(UUID(as_uuid=True), ForeignKey("work_orders.id"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    quantity = Column(Numeric(12, 2), nullable=False)
+    unit_price = Column(Numeric(12, 2), nullable=False)
+    subtotal = Column(Numeric(12, 2), nullable=False)
+    done = Column(Boolean, default=False, nullable=False)
+    
+    work_order = relationship("WorkOrder", back_populates="items")
+    product = relationship("Product")
+
+    @property
+    def product_name(self):
+        return self.product.name if self.product else "N/A"
+
+    @property
+    def product_type(self):
+        if not self.product or not self.product.product_type:
+            return "PRODUCTO"
+        return "SERVICIO" if self.product.product_type == ProductType.SERVICE else "PRODUCTO"
+
+class WorkOrderPayment(BaseModel):
+    __tablename__ = "work_order_payments"
+    
+    work_order_id = Column(UUID(as_uuid=True), ForeignKey("work_orders.id"), nullable=False)
+    session_id = Column(UUID(as_uuid=True), ForeignKey("cash_sessions.id"), nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)
+    payment_method = Column(Enum(PaymentMethod), nullable=False)
+    date_created = Column(DateTime(timezone=True), default=func.now())
+    
+    work_order = relationship("WorkOrder", back_populates="payments")
+    session = relationship("CashSession")

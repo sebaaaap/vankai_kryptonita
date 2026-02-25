@@ -78,9 +78,8 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection, 
             target_metadata=target_metadata,
-            include_schemas=True,
+            include_schemas=False,
             include_object=include_object,
-            version_table_schema=target_metadata.schema if target_metadata.schema else "public"
         )
 
         with context.begin_transaction():

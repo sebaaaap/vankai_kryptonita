@@ -4,37 +4,51 @@ from datetime import datetime
 from typing import Optional, List
 from decimal import Decimal
 
+# --- Cash Register Schemas ---
+class CashRegisterBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    is_active: bool = True
+
+class CashRegisterCreate(CashRegisterBase):
+    pass
+
+class CashRegisterResponse(CashRegisterBase):
+    id: UUID
+    class Config:
+        from_attributes = True
+
+# --- Cash Session Schemas ---
 class CashSessionCreate(BaseModel):
     """Schema para abrir una sesión de caja"""
-    initial_cash: Decimal = Field(ge=0, description="Efectivo inicial debe ser mayor o igual a 0")
-    user_id: Optional[str] = "admin"
-    name: Optional[str] = None  # Si no se provee, se genera automáticamente
-    notes: Optional[str] = None # Observaciones iniciales
+    opening_balance: Decimal = Field(ge=0, description="Efectivo inicial debe ser mayor o igual a 0")
+    user_id: str
+    cash_register_id: UUID
+    notes: Optional[str] = None
 
 class CashSessionClose(BaseModel):
-    """
-    Schema para cerrar una sesión de caja
-    El sistema calcula automáticamente el expected_cash y la diferencia
-    """
-    final_cash: Decimal = Field(ge=0, description="Efectivo final contado por el cajero")
-    notes: Optional[str] = None  # Observaciones del cierre
+    """Schema para cerrar una sesión de caja"""
+    closing_balance: Decimal = Field(ge=0, description="Efectivo final contado por el cajero")
+    notes: Optional[str] = None
 
 class CashSessionResponse(BaseModel):
     """Response completo de una sesión"""
     id: UUID
-    name: str
-    start_time: datetime
-    end_time: Optional[datetime]
-    initial_cash: Decimal
-    final_cash: Optional[Decimal]
-    expected_cash: Decimal
+    user_id: str
+    cash_register_id: UUID
+    opened_at: datetime
+    closed_at: Optional[datetime]
+    status: str
+    opening_balance: Decimal
+    closing_balance: Optional[Decimal]
+    expected_balance: Decimal
     difference: Decimal
     total_sales_cash: Decimal
     total_sales_card: Decimal
     total_sales_transfer: Decimal
-    is_open: bool
-    user_id: Optional[str]
     notes: Optional[str]
+    
+    cash_register: Optional[CashRegisterResponse] = None
 
     class Config:
         from_attributes = True
@@ -42,10 +56,9 @@ class CashSessionResponse(BaseModel):
 class CashSessionSummary(BaseModel):
     """Resumen de sesión para reportes"""
     id: UUID
-    name: str
-    start_time: datetime
-    end_time: Optional[datetime]
+    opened_at: datetime
+    closed_at: Optional[datetime]
     total_sales: Decimal
     total_transactions: int
     difference: Decimal
-    is_open: bool
+    status: str
