@@ -2,11 +2,17 @@
 
 import React, { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Search, Car, User, Clock, CheckCircle, FileText, Send, Printer, X, ShoppingCart, Wrench, Download, Mail, Share2, ChevronDown, ChevronUp } from "lucide-react"
+import { Search, Car, User, Clock, CheckCircle, FileText, Send, Printer, X, ShoppingCart, Wrench, Download, Mail, Share2, ChevronDown, ChevronUp, Droplet } from "lucide-react"
 import { apiService } from "@/services/apiService"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import {
+    Sheet,
+    SheetContent,
+    SheetTitle,
+} from "@/components/ui/sheet"
+import { DigitalServiceCard } from "@/components/backend/digital-service-card"
 
 export type LineItem = {
     id: string
@@ -43,6 +49,8 @@ export function ServiceEditor() {
     const [showSuccessModal, setShowSuccessModal] = useState(false)
     const [savedId, setSavedId] = useState("")
     const [sharingExpanded, setSharingExpanded] = useState(false)
+    const [showSticker, setShowSticker] = useState(false)
+    const [stickerData, setStickerData] = useState<any>(null)
 
     useEffect(() => {
         // Fetch products and customers
@@ -144,7 +152,8 @@ export function ServiceEditor() {
                     product_id: i.product_id,
                     quantity: i.quantity,
                     unit_price: i.price
-                }))
+                })),
+                service_info: stickerData
             }
 
             toast.info("Guardando documento...")
@@ -177,13 +186,12 @@ export function ServiceEditor() {
     }
 
     return (
-        <div className="flex flex-col h-full items-center pb-12">
-
-            <div className="w-full max-w-7xl bg-card rounded-2xl border border-border flex flex-col md:flex-row overflow-hidden shadow-sm mb-8">
+        <div className="flex flex-col h-full w-full max-w-[1800px] mx-auto pb-12 px-2 md:px-0">
+            <div className="w-full max-w-full bg-card rounded-2xl border border-border flex flex-col md:flex-row overflow-hidden shadow-sm mb-8 min-h-[850px]">
                 {/* Sidebar Izquierdo - Datos Principales */}
-                <div className="w-full md:w-[350px] bg-muted/20 p-8 border-r border-border flex flex-col gap-8 shrink-0">
+                <div className="w-full md:w-[400px] bg-muted/20 p-12 border-r border-border flex flex-col gap-10 shrink-0">
                     <div>
-                        <h2 className="text-2xl font-black text-foreground tracking-tight mb-2">
+                        <h2 className="text-3xl font-black text-foreground tracking-tight mb-3">
                             {mode === "quote" ? "Nueva Cotización" : "Orden de Trabajo"}
                         </h2>
                         <div className="flex items-center gap-2">
@@ -295,11 +303,27 @@ export function ServiceEditor() {
                                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground uppercase">KM</span>
                             </div>
                         </div>
+
+                        {mode === 'ot' && selectedVehicle && (
+                            <div className="space-y-2 pt-2">
+                                <Button
+                                    onClick={() => setShowSticker(true)}
+                                    variant="outline"
+                                    className="w-full h-12 bg-white border-2 border-emerald-500/20 text-emerald-600 font-bold rounded-xl hover:bg-emerald-50 hover:border-emerald-500/40 transition-all flex items-center justify-center gap-2 group shadow-sm"
+                                >
+                                    <Droplet className="w-5 h-5 text-emerald-500 group-hover:scale-110 transition-transform" />
+                                    <span>Sticker Lubricentro {stickerData ? "✓" : ""}</span>
+                                </Button>
+                                <p className="text-[10px] text-muted-foreground font-medium text-center italic">
+                                    Define aceites, filtros y próximos servicios
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 {/* Main Panel - Editor */}
-                <div className="flex-1 flex flex-col min-h-[600px]">
+                <div className="flex-1 flex flex-col min-h-[850px]">
                     <div className="p-8 border-b border-border bg-card">
 
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -405,11 +429,11 @@ export function ServiceEditor() {
                             <table className="w-full text-left bg-card rounded-2xl overflow-hidden border border-border shadow-sm">
                                 <thead>
                                     <tr className="bg-muted/50 border-b border-border">
-                                        <th className="px-3 py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Tipo</th>
-                                        <th className="px-3 py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Descripción</th>
-                                        <th className="px-3 py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Cant.</th>
-                                        <th className="px-3 py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-right">Unitario</th>
-                                        <th className="px-3 py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-right">Subtotal</th>
+                                        <th className="px-5 py-4 text-[11px] font-black text-muted-foreground uppercase tracking-widest">Tipo</th>
+                                        <th className="px-5 py-4 text-[11px] font-black text-muted-foreground uppercase tracking-widest">Descripción</th>
+                                        <th className="px-5 py-4 text-[11px] font-black text-muted-foreground uppercase tracking-widest text-center">Cant.</th>
+                                        <th className="px-5 py-4 text-[11px] font-black text-muted-foreground uppercase tracking-widest text-right">Unitario</th>
+                                        <th className="px-5 py-4 text-[11px] font-black text-muted-foreground uppercase tracking-widest text-right">Subtotal</th>
                                         <th className="w-10"></th>
                                     </tr>
                                 </thead>
@@ -418,34 +442,34 @@ export function ServiceEditor() {
                                         const totalItem = item.price * item.quantity
                                         return (
                                             <tr key={item.id} className="border-b border-border/50 last:border-b-0 group hover:bg-muted/20 transition-colors">
-                                                <td className="px-3 py-2.5">
+                                                <td className="px-5 py-4">
                                                     {item.isService ?
-                                                        <span className="bg-primary/10 text-primary text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 w-fit whitespace-nowrap">
-                                                            <Wrench size={9} /> SERV.
+                                                        <span className="bg-primary/10 text-primary text-[10px] font-black px-2 py-1 rounded flex items-center gap-1.5 w-fit whitespace-nowrap">
+                                                            <Wrench size={10} /> SERV.
                                                         </span> :
-                                                        <span className="bg-muted text-muted-foreground text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 w-fit whitespace-nowrap">
-                                                            <ShoppingCart size={9} /> PROD.
+                                                        <span className="bg-muted text-muted-foreground text-[10px] font-black px-2 py-1 rounded flex items-center gap-1.5 w-fit whitespace-nowrap">
+                                                            <ShoppingCart size={10} /> PROD.
                                                         </span>
                                                     }
                                                 </td>
-                                                <td className="px-3 py-2.5 font-bold text-sm text-foreground max-w-[200px] truncate">{item.name}</td>
-                                                <td className="px-3 py-2.5 text-center">
+                                                <td className="px-5 py-4 font-bold text-base text-foreground max-w-[300px] truncate">{item.name}</td>
+                                                <td className="px-5 py-4 text-center">
                                                     <input
                                                         type="number"
-                                                        className="w-14 bg-muted/40 rounded-lg py-1 text-center text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                                        className="w-16 bg-muted/40 rounded-lg py-1.5 text-center text-base font-bold focus:outline-none focus:ring-2 focus:ring-primary/20"
                                                         value={item.quantity}
                                                         onChange={e => handleUpdateQuantity(item.id, e.target.value)}
                                                     />
                                                 </td>
-                                                <td className="px-3 py-2.5 text-right">
+                                                <td className="px-5 py-4 text-right">
                                                     <input
                                                         type="number"
-                                                        className="w-24 bg-muted/40 rounded-lg py-1 px-2 text-right text-sm font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                                        className="w-28 bg-muted/40 rounded-lg py-1.5 px-2 text-right text-base font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                                                         value={item.price}
                                                         onChange={e => handleUpdatePrice(item.id, e.target.value)}
                                                     />
                                                 </td>
-                                                <td className="px-3 py-2.5 text-right font-black text-sm text-foreground whitespace-nowrap">
+                                                <td className="px-5 py-4 text-right font-black text-base text-foreground whitespace-nowrap">
                                                     ${totalItem.toLocaleString("es-CL")}
                                                 </td>
                                                 <td className="px-2 py-2.5 text-center">
@@ -582,6 +606,26 @@ export function ServiceEditor() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Sticker de Lubricentro (Drawer/Sheet) */}
+            <Sheet open={showSticker} onOpenChange={setShowSticker}>
+                <SheetContent side="right" className="p-0 sm:max-w-md border-l-0 bg-transparent shadow-none">
+                    <SheetTitle className="sr-only">Sticker de Lubricentro</SheetTitle>
+                    <div className="h-full p-4">
+                        <DigitalServiceCard
+                            vehicle={selectedVehicle}
+                            data={stickerData}
+                            readOnly={false}
+                            onSave={async (data) => {
+                                setStickerData(data)
+                                setShowSticker(false)
+                                toast.success("Información de lubricación vinculada a la orden")
+                            }}
+                            onClose={() => setShowSticker(false)}
+                        />
+                    </div>
+                </SheetContent>
+            </Sheet>
 
         </div>
     )

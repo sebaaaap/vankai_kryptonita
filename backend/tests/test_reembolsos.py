@@ -105,9 +105,14 @@ def setup_reembolso(db):
     )
     db.add(producto)
 
+    from app.models.base import CashRegister
+    caja = CashRegister(name="Caja Principal")
+    db.add(caja)
+    db.flush()
     sesion = CashSession(
-        name="Caja Principal",
-        initial_cash=50000,
+        cash_register_id=caja.id,
+        opening_balance=50000,
+        user_id="admin_test",
         total_sales_cash=0.0,
         total_sales_card=0.0,
         total_sales_transfer=0.0,

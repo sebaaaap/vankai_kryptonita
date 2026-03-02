@@ -32,6 +32,12 @@ def reject_quote(quote_id: UUID, db: Session = Depends(get_db_session)):
     """Rechaza una cotización cambiándole el estado."""
     return QuoteWorkOrderService.reject_quote(db, quote_id)
 
+@router.delete("/quotes/{quote_id}")
+def delete_quote(quote_id: UUID, db: Session = Depends(get_db_session)):
+    """Elimina permanentemente una cotización."""
+    QuoteWorkOrderService.delete_quote(db, quote_id)
+    return {"message": "Cotización eliminada correctamente"}
+
 @router.get("/pos/active-orders", response_model=List[WorkOrderResponse])
 def get_active_orders(db: Session = Depends(get_db_session)):
     """Recupera todas las OTs activas (abierta, en progreso, lista)."""
@@ -45,8 +51,14 @@ def add_work_order_payment(
     db: Session = Depends(get_db_session)
 ):
     """Registra un abono en la OT validando sesión. Genera ticket final si saldo es 0."""
-    payment, _ = QuoteWorkOrderService.add_payment(db, wo_id, payment_data, session_id)
-    return payment
+    ticket, _ = QuoteWorkOrderService.add_payment(db, wo_id, payment_data, session_id)
+    return {
+        "id": ticket.id,
+        "session_id": ticket.session_id,
+        "amount": ticket.total_amount,
+        "payment_method": ticket.payment_method,
+        "date_created": ticket.date_created
+    }
 
 @router.get("/ot/{wo_id}/balance", response_model=WorkOrderBalanceResponse)
 def get_work_order_balance(wo_id: UUID, db: Session = Depends(get_db_session)):
@@ -80,6 +92,8 @@ def update_ot_items_done(
             WorkOrderItem.work_order_id == wo_id
         ).first()
         if item:
+            if done and not item.done:
+                QuoteWorkOrderService.consume_item_stock(db, item, wo)
             item.done = done
             updated += 1
     
@@ -121,3 +135,9 @@ def update_ot_state(
     wo.state = new_state
     db.commit()
     return {"id": str(wo.id), "state": wo.state.value}
+
+@router.delete("/ot/{wo_id}")
+def delete_work_order(wo_id: UUID, db: Session = Depends(get_db_session)):
+    """Elimina permanentemente una orden de trabajo."""
+    QuoteWorkOrderService.delete_work_order(db, wo_id)
+    return {"message": "Orden de trabajo eliminada correctamente"}

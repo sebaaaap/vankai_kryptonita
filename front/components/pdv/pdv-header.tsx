@@ -1,5 +1,6 @@
 "use client"
 
+import useSWR from "swr"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -42,6 +43,8 @@ interface PdvHeaderProps {
   activeSessionName?: string
   customersList?: any[]
   onCustomerCreated?: () => void
+  onOpenOtPayment?: () => void
+  userName?: string
 }
 
 export function PdvHeader({
@@ -57,10 +60,30 @@ export function PdvHeader({
   activeSessionName = "Caja Principal",
   customersList,
   onCustomerCreated,
+  onOpenOtPayment,
+  userName,
 }: PdvHeaderProps) {
   const draftOrders = orders.filter((o) => o.status === "draft")
   const [searchTerm, setSearchTerm] = useState("")
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false)
+
+  // Fetch active OTs to show indicators
+  const { data: activeOts } = useSWR("/pos/active-orders", async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/pos/active-orders`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      return response.json();
+    } catch (e) { return [] }
+  });
+
+  const customerOts = useMemo(() => {
+    if (!selectedCustomer || !activeOts) return [];
+    return activeOts.filter((ot: any) =>
+      String(ot.customer_id) === selectedCustomer.id ||
+      ot.customer?.rut === selectedCustomer.rut
+    );
+  }, [selectedCustomer, activeOts]);
 
   const filteredCustomers = useMemo(() => {
     const list = customersList || customers
@@ -82,8 +105,10 @@ export function PdvHeader({
             <Wrench className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-sm font-bold text-foreground leading-none">Punto de Venta</h1>
-            <p className="text-[11px] text-muted-foreground">AutoTaller Pro - {activeSessionName}</p>
+            <h1 className="text-sm font-black text-foreground leading-none uppercase tracking-tight">Punto de Venta</h1>
+            <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
+              {userName || 'Usuario'} • {activeSessionName}
+            </p>
           </div>
         </div>
 
@@ -162,6 +187,22 @@ export function PdvHeader({
             </div>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* OT Indicator for selected customer */}
+        {selectedCustomer && customerOts.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenOtPayment}
+            className="flex items-center gap-1.5 px-2 h-9 rounded-lg border-2 border-orange-500/50 bg-orange-50 text-orange-700 hover:bg-orange-100 animate-pulse transition-all ml-2"
+          >
+            <Wrench className="h-4 w-4" />
+            <div className="flex flex-col items-start leading-none">
+              <span className="text-[10px] font-black uppercase tracking-tighter">OT Disponible</span>
+              <span className="text-[11px] font-bold">{customerOts.length} {customerOts.length === 1 ? 'pendiente' : 'pendientes'}</span>
+            </div>
+          </Button>
+        )}
 
         <PdvQuickCustomer
           open={isQuickCreateOpen}
@@ -245,25 +286,6 @@ export function PdvHeader({
           <LayoutDashboard className="h-3.5 w-3.5" />
           Backend
         </Button>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
-              <Settings className="h-4 w-4 text-muted-foreground" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem className="gap-2 text-xs">
-              <Settings className="h-3.5 w-3.5" />
-              Configuracion
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2 text-xs text-destructive">
-              <LogOut className="h-3.5 w-3.5" />
-              Cerrar Sesion
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </header>
   )

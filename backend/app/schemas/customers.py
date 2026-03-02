@@ -21,6 +21,7 @@ class VehicleBase(BaseModel):
     vehicle_type: VehicleType = VehicleType.automovil
     color: Optional[str] = None
     vin: Optional[str] = None
+    service_info: Optional[dict] = None
 
 class VehicleCreate(VehicleBase):
     customer_id: Optional[UUID] = None
@@ -33,6 +34,7 @@ class VehicleUpdate(BaseModel):
     vehicle_type: Optional[VehicleType] = None
     color: Optional[str] = None
     vin: Optional[str] = None
+    service_info: Optional[dict] = None
 
 class VehicleResponse(VehicleBase):
     id: UUID

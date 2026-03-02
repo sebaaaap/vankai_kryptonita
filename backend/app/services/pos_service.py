@@ -180,7 +180,8 @@ class POSService:
                     tax_amount=tax_amount,
                     total_amount=total,
                     payment_method="MIXED" if len(sale_data.payments) > 1 else sale_data.payments[0].payment_method.value,
-                    session_id=sale_data.session_id
+                    session_id=sale_data.session_id,
+                    customer_id=getattr(sale_data, "customer_id", None)
                 )
                 db.add(ticket)
                 db.flush()
@@ -455,9 +456,19 @@ class POSService:
     @staticmethod
     def get_sale_by_id(db: Session, ticket_id: int) -> Optional[Ticket]:
         """Obtiene una venta por ID"""
-        return db.query(Ticket).filter(Ticket.id == ticket_id).first()
+        from sqlalchemy.orm import joinedload
+        return db.query(Ticket).options(
+            joinedload(Ticket.customer),
+            joinedload(Ticket.items).joinedload(SaleItem.product),
+            joinedload(Ticket.payments)
+        ).filter(Ticket.id == ticket_id).first()
     
     @staticmethod
     def get_sales_by_session(db: Session, session_id: int) -> List[Ticket]:
         """Obtiene todas las ventas de una sesión"""
-        return db.query(Ticket).filter(Ticket.session_id == session_id).order_by(Ticket.created_at.desc()).all()
+        from sqlalchemy.orm import joinedload
+        return db.query(Ticket).options(
+            joinedload(Ticket.customer),
+            joinedload(Ticket.items).joinedload(SaleItem.product),
+            joinedload(Ticket.payments)
+        ).filter(Ticket.session_id == session_id).order_by(Ticket.date_created.desc()).all()

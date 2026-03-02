@@ -478,19 +478,15 @@ export default function AppPage() {
           const restoredOrders: Order[] = (sales || []).map(sale => {
             const mappedLines: OrderLine[] = (sale.items || []).map(item => {
               // Buscar producto por ID directo O por ID de una de sus ubicaciones (aggregated)
-              const apiProd = apiProducts?.find(p =>
+              const apiProd = item.product || apiProducts?.find(p =>
                 p.id === item.product_id ||
                 (p as any).locations?.some((loc: any) => loc.id === item.product_id)
               )
 
-              if (!apiProd) {
-                console.warn(`Producto ${item.product_id} no encontrado en la lista actual de productos.`);
-              }
-
               const mappedProduct: Product = {
                 id: String(item.product_id),
                 name: apiProd?.name || `Producto #${item.product_id}`,
-                price: toNum(item.unit_price),
+                price: item.unit_price ? toNum(item.unit_price) : toNum(apiProd?.price || 0),
                 categoryId: apiProd?.category || String(apiProd?.category_id) || "all",
                 stock: toNum((apiProd as any)?.total_stock || (apiProd as any)?.stock_quantity || 0),
                 tax: 19,
@@ -516,7 +512,13 @@ export default function AppPage() {
             return {
               id: String(sale.id),
               lines: mappedLines,
-              customer: null, // Si el backend no devuelve cliente, queda null
+              customer: sale.customer ? {
+                id: String(sale.customer_id),
+                name: sale.customer.name,
+                rut: sale.customer.rut,
+                phone: sale.customer.phone,
+                vehicle: sale.customer.vehicle // if available
+              } : null,
               total: toNum(sale.total_amount),
               tax: toNum(sale.tax_amount),
               subtotal: toNum(sale.subtotal),
@@ -662,7 +664,8 @@ export default function AppPage() {
               method.type === "card" ? ApiPaymentMethod.CARD :
                 ApiPaymentMethod.TRANSFER,
           amount: saleTotal  // ← monto real de la venta, NO el que pagó el cliente
-        }]
+        }],
+        customer_id: selectedCustomer ? selectedCustomer.id : null
       }
 
       try {
@@ -712,12 +715,32 @@ export default function AppPage() {
     [activeSession, selectedCustomer],
   )
 
-  const handleConfirmOtPayment = async (amount: number, method: string) => {
-    // LLamada pendiente a /ot/{id}/payments
-    // simulamos la interaccion
-    toast.success(`Abono a OT por $${amount.toLocaleString("es-CL")} registrado en caja.`)
-    setShowOtPayment(false)
-    mutate("/sessions/active")
+  const handleConfirmOtPayment = async (amount: number, method: string, otId?: string, itemIds?: string[]) => {
+    if (!activeSession) {
+      toast.error("No hay sesión activa para procesar el abono.")
+      return
+    }
+    if (!otId) {
+      toast.error("No se ha seleccionado una OT.")
+      return
+    }
+
+    try {
+      await apiService.addWorkOrderPayment(
+        otId,
+        {
+          amount: amount,
+          payment_method: method.toLowerCase(),
+          item_ids: itemIds
+        },
+        activeSession.id
+      )
+      toast.success(`Abono a OT por $${amount.toLocaleString("es-CL")} registrado en caja.`)
+      setShowOtPayment(false)
+      mutate("/sessions/active")
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Error al procesar el abono de OT")
+    }
   }
 
   // Refund
@@ -910,7 +933,9 @@ export default function AppPage() {
             onOpenHistory={() => setShowHistory(true)}
             onGoToBackend={() => setCurrentModule("backend")}
             onOpenCloseSession={() => setShowCloseSession(true)}
+            onOpenOtPayment={() => setShowOtPayment(true)}
             activeSessionName={uiActiveSession?.name}
+            userName={user?.full_name || user?.username}
             customersList={mappedApiCustomers}
             onCustomerCreated={() => mutate("/customers/")}
           />
@@ -947,7 +972,7 @@ export default function AppPage() {
           </div>
 
           <PdvPaymentModal open={showPayment} onClose={() => setShowPayment(false)} total={currentOrder?.total || 0} onConfirmPayment={handleConfirmPayment} />
-          <PdvOtPaymentModal open={showOtPayment} onClose={() => setShowOtPayment(false)} onConfirm={handleConfirmOtPayment} />
+          <PdvOtPaymentModal open={showOtPayment} onClose={() => setShowOtPayment(false)} onConfirm={handleConfirmOtPayment} selectedCustomer={selectedCustomer} />
           <PdvOrderHistory open={showHistory} onClose={() => setShowHistory(false)} paidOrders={paidOrders} onRefund={handleRefund} />
           {activeSession && <PdvCloseSession open={showCloseSession} onClose={() => setShowCloseSession(false)} session={uiActiveSession!} onConfirmClose={handleConfirmCloseSession} />}
           <PdvRefundModal open={showRefund} order={refundOrder} onClose={() => setShowRefund(false)} onConfirm={handleConfirmRefund} />

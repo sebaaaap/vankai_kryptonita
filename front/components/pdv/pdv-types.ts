@@ -42,6 +42,10 @@ export interface Order {
   refundedFrom?: string
   returnToStock?: boolean
   originalTicketId?: string
+  isWorkOrder?: boolean
+  financialProgress?: number
+  operationalProgress?: number
+  workOrderState?: string
 }
 
 export interface Customer {
@@ -50,6 +54,7 @@ export interface Customer {
   email?: string
   phone?: string
   rfc?: string
+  rut?: string
   vehicle?: string
 }
 

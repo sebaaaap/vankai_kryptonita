@@ -55,6 +55,7 @@ export interface SaleItemResponse {
     unit_price: number;
     discount_percent: number;
     subtotal: number;
+    product?: any;
 }
 
 export interface SaleResponse {
@@ -72,6 +73,8 @@ export interface SaleResponse {
     original_ticket_id?: string;
     items: SaleItemResponse[];
     payments: any[];
+    customer_id?: string;
+    customer?: any;
 }
 
 export interface CashRegisterResponse {

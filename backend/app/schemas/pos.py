@@ -37,6 +37,9 @@ class ProductBase(BaseModel):
     internal_reference: Optional[str] = None
     uom: str = "unidades"
 
+    class Config:
+        from_attributes = True
+
 class ProductResponse(ProductBase):
     id: UUID
     stock_quantity: Decimal
@@ -59,6 +62,16 @@ class PaymentResponse(PaymentCreate):
     class Config:
         from_attributes = True
 
+# --- Nested Info Schemas ---
+class CustomerMini(BaseModel):
+    name: str
+    rut: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 # --- Sale Item Schemas ---
 class SaleItemCreate(BaseModel):
     """Schema para crear un item de venta"""
@@ -71,9 +84,10 @@ class SaleItemResponse(BaseModel):
     id: UUID
     product_id: UUID
     quantity: Decimal
-    price: Decimal
+    unit_price: Decimal
     discount_percent: Decimal
     subtotal: Decimal
+    product: Optional[ProductBase] = None # Include product info for display
 
     class Config:
         from_attributes = True
@@ -87,6 +101,8 @@ class SaleCreate(BaseModel):
     items: List[SaleItemCreate] = Field(min_items=1, description="Debe haber al menos 1 item")
     payments: List[PaymentCreate] = Field(min_items=1, description="Debe haber al menos 1 pago")
     session_id: UUID = Field(..., description="Toda venta debe estar vinculada a una sesión")
+    customer_id: Optional[UUID] = None
+    vehicle_id: Optional[UUID] = None
     
     @validator('payments')
     def validate_payments(cls, v, values):
@@ -115,6 +131,8 @@ class SaleResponse(BaseModel):
     original_ticket_id: Optional[UUID] = None
     items: List[SaleItemResponse]
     payments: List[PaymentResponse]
+    customer_id: Optional[UUID] = None
+    customer: Optional[CustomerMini] = None # Simplified customer info
     
     class Config:
         from_attributes = True

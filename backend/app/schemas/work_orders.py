@@ -19,6 +19,7 @@ class WorkOrderItemResponse(BaseModel):
     unit_price: Decimal
     subtotal: Decimal
     done: bool = False
+    is_paid: bool = False
     
     class Config:
         from_attributes = True
@@ -26,6 +27,7 @@ class WorkOrderItemResponse(BaseModel):
 class WorkOrderPaymentCreate(BaseModel):
     amount: Decimal
     payment_method: str
+    item_ids: Optional[List[UUID]] = None
 
 class WorkOrderPaymentResponse(BaseModel):
     id: UUID
@@ -45,6 +47,7 @@ class WorkOrderCreate(BaseModel):
     notes: Optional[str] = None
     assigned_user_id: Optional[str] = None
     items: List[WorkOrderItemCreate] = []
+    service_info: Optional[dict] = None
 
 class WorkOrderResponse(BaseModel):
     id: UUID
@@ -55,6 +58,7 @@ class WorkOrderResponse(BaseModel):
     mileage: Optional[Decimal] = None
     notes: Optional[str] = None
     assigned_user_id: Optional[str] = None
+    service_info: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
     items: List[WorkOrderItemResponse] = []
@@ -62,6 +66,8 @@ class WorkOrderResponse(BaseModel):
     customer: Optional[CustomerResponse] = None
     vehicle: Optional[VehicleResponse] = None
     total_amount: Optional[Decimal] = None 
+    financial_progress: Optional[Decimal] = None
+    operational_progress: Optional[Decimal] = None
     
     class Config:
         from_attributes = True

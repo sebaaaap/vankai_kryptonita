@@ -206,5 +206,18 @@ export const apiService = {
     async updateOtState(woId: string, state: string): Promise<any> {
         const response = await api.patch(`/ot/${woId}/state`, { state });
         return response.data;
+    },
+
+    async addWorkOrderPayment(woId: string, paymentData: { amount: number, payment_method: string, item_ids?: string[] | null }, sessionId: string): Promise<any> {
+        const response = await api.post(`/ot/${woId}/payments?session_id=${sessionId}`, paymentData);
+        return response.data;
+    },
+
+    async deleteQuote(quoteId: string): Promise<void> {
+        await api.delete(`/quotes/${quoteId}`);
+    },
+
+    async deleteWorkOrder(woId: string): Promise<void> {
+        await api.delete(`/ot/${woId}`);
     }
 };

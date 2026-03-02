@@ -148,17 +148,45 @@ export function PdvOrderHistory({
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-xs font-bold text-foreground">{order.id}</span>
                           <Badge
-                            variant={order.total < 0 ? "destructive" : order.status === "refunded" ? "outline" : "secondary"}
+                            variant={order.total < 0 ? "destructive" : order.isWorkOrder ? "default" : order.status === "refunded" ? "outline" : "secondary"}
                             className="h-4 rounded px-1.5 text-[9px]"
                           >
-                            {order.total < 0 ? "Nota Crédito" : order.status === "refunded" ? "Reembolsado" : "Pagado"}
+                            {order.total < 0 ? "Nota Crédito" : order.isWorkOrder ? "Orden Trabajo" : order.status === "refunded" ? "Reembolsado" : "Pagado"}
                           </Badge>
                         </div>
                         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                           <User className="h-3 w-3" />
                           <span className="truncate">{order.customer?.name ?? "Publico en General"}</span>
+                          {order.isWorkOrder && order.customer?.vehicle && (
+                            <>
+                              <span className="mx-0.5">•</span>
+                              <Car className="h-3 w-3" />
+                              <span>{order.customer.vehicle}</span>
+                            </>
+                          )}
                         </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{formatDate(order.date)}</p>
+
+                        {order.isWorkOrder && (
+                          <div className="flex flex-col gap-1 mt-1.5 mb-0.5 w-[140px]">
+                            <div className="flex items-center gap-1.5 text-[9px]">
+                              <span className="w-9 text-muted-foreground">Pago</span>
+                              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full bg-green-500" style={{ width: `${order.financialProgress || 0}%` }} />
+                              </div>
+                              <span className="w-6 text-right font-medium">{Math.round(order.financialProgress || 0)}%</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[9px]">
+                              <span className="w-9 text-muted-foreground">Trabajo</span>
+                              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500" style={{ width: `${order.operationalProgress || 0}%` }} />
+                              </div>
+                              <span className="w-6 text-right font-medium">{Math.round(order.operationalProgress || 0)}%</span>
+                            </div>
+                          </div>
+                        )}
+                        {!order.isWorkOrder && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{formatDate(order.date)}</p>
+                        )}
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <span className={`text-sm font-bold ${order.total < 0 ? "text-destructive" : "text-foreground"}`}>

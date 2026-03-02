@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Plus, Search, FileText, CheckCircle, XCircle, Clock, Wrench, LayoutGrid, List, Printer, Send, X, CheckSquare, Square, Mail, Download } from "lucide-react";
+import { Plus, Search, FileText, CheckCircle, XCircle, Clock, Wrench, LayoutGrid, List, Printer, Send, X, CheckSquare, Square, Mail, Download, Banknote, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { DocumentTemplate } from "./DocumentTemplate";
@@ -20,6 +20,7 @@ export interface QuoteOtItemDetail {
     price: number;
     is_service: boolean;
     done: boolean;
+    is_paid?: boolean;
 }
 
 export interface QuoteOtItem {
@@ -43,6 +44,7 @@ export interface QuoteOtItem {
     state: StatusType;
     items: QuoteOtItemDetail[];
     created_by_name?: string;
+    financial_progress?: number;
 }
 
 const mockData: QuoteOtItem[] = [
@@ -190,8 +192,10 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
                         quantity: Number(i.quantity),
                         price: Number(i.unit_price),
                         is_service: i.product_type === "SERVICIO",
-                        done: Boolean(i.done)
-                    })) || []
+                        done: Boolean(i.done),
+                        is_paid: Boolean(i.is_paid)
+                    })) || [],
+                    financial_progress: Number(wo.financial_progress || 0)
                 }));
                 setItemsList(mapped);
             }
@@ -279,6 +283,23 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
             setSelectedDoc(null); // Cerrar modal al guardar
         } catch {
             toast.error("Error al guardar progreso en el servidor");
+        }
+    };
+
+    const handleDeleteItem = async (e: React.MouseEvent, item: QuoteOtItem) => {
+        e.stopPropagation();
+        if (!confirm(`¿Está seguro que desea eliminar esta ${item.type === "quote" ? "cotización" : "orden de trabajo"}?`)) return;
+
+        try {
+            if (item.type === "quote") {
+                await apiService.deleteQuote(item.id);
+            } else {
+                await apiService.deleteWorkOrder(item.id);
+            }
+            toast.success(`${item.type === "quote" ? "Cotización" : "Orden"} eliminada correctamente`);
+            loadData();
+        } catch (error: any) {
+            toast.error(error.response?.data?.detail || "Error al eliminar el registro");
         }
     };
 
@@ -399,7 +420,8 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
                                     <th className="table-header">Cliente</th>
                                     <th className="table-header">Vehículo</th>
                                     <th className="table-header text-right">Total</th>
-                                    <th className="table-header text-center">Estado</th>
+                                    <th className="table-header text-center whitespace-nowrap">Estado Trab.</th>
+                                    {type === "ot" && <th className="table-header text-center whitespace-nowrap">Estado Pago</th>}
                                     <th className="table-header text-right">Acciones</th>
                                 </tr>
                             </thead>
@@ -433,11 +455,11 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
                                                 <div className="flex flex-col items-center gap-1.5 min-w-[80px]">
                                                     <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden border border-border/30">
                                                         <div
-                                                            className="h-full bg-primary transition-all duration-500"
+                                                            className="h-full bg-blue-500 transition-all duration-500"
                                                             style={{ width: `${(item.items.filter(i => i.done).length / (item.items.length || 1)) * 100}%` }}
                                                         />
                                                     </div>
-                                                    <span className="text-[10px] font-black text-primary italic">
+                                                    <span className="text-[10px] font-black text-blue-600 italic">
                                                         {Math.round((item.items.filter(i => i.done).length / (item.items.length || 1)) * 100)}%
                                                     </span>
                                                 </div>
@@ -445,6 +467,38 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
                                                 stateBadge(item.state)
                                             )}
                                         </td>
+                                        {type === "ot" && (
+                                            <td className="px-5 py-4 text-center">
+                                                <div className="relative group/pago flex flex-col items-center">
+                                                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold border transition-colors ${!item.financial_progress || item.financial_progress === 0 ? "bg-red-50 text-red-600 border-red-200" : item.financial_progress < 100 ? "bg-yellow-50 text-yellow-600 border-yellow-200" : "bg-emerald-50 text-emerald-600 border-emerald-200"}`}>
+                                                        {!item.financial_progress || item.financial_progress === 0 ? "Sin Pago" : item.financial_progress < 100 ? "Pago Parcial" : "Pagado"}
+                                                    </span>
+
+                                                    {/* Tooltip de items pagados */}
+                                                    {item.items.some(i => i.is_paid) && (
+                                                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-56 bg-white border border-border rounded-xl shadow-2xl p-3 z-50 opacity-0 group-hover/pago:opacity-100 pointer-events-none transition-all transform translate-y-2 group-hover/pago:translate-y-0">
+                                                            <div className="flex items-center gap-1.5 mb-2 border-b border-slate-100 pb-2">
+                                                                <Banknote size={12} className="text-emerald-500" />
+                                                                <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Detalle de lo Pagado</p>
+                                                            </div>
+                                                            <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                                                                {item.items.filter(i => i.is_paid).map(i => (
+                                                                    <div key={i.id} className="flex justify-between items-start text-[10px] leading-tight">
+                                                                        <span className="font-semibold text-slate-600 text-left mr-2">✓ {i.product_name}</span>
+                                                                        <span className="text-emerald-600 font-black whitespace-nowrap">${(i.quantity * i.price).toLocaleString("es-CL")}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            <div className="mt-2 pt-2 border-t border-slate-100 flex justify-between items-center">
+                                                                <span className="text-[10px] font-black text-slate-400">TOTAL ABONADO</span>
+                                                                <span className="text-[11px] font-black text-slate-900">${(item.items.filter(i => i.is_paid).reduce((acc, i) => acc + (i.quantity * i.price), 0)).toLocaleString("es-CL")}</span>
+                                                            </div>
+                                                            <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-r border-b border-border rotate-45" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        )}
                                         <td className="px-5 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button
@@ -472,6 +526,13 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
                                                         </button>
                                                     </>
                                                 )}
+                                                <button
+                                                    onClick={(e) => handleDeleteItem(e, item)}
+                                                    className="p-1.5 bg-muted text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                                    title="Eliminar"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -580,7 +641,8 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
                         <div className="col-span-full py-12 text-center text-muted-foreground">No se encontraron registros para la vista Kanban.</div>
                     )}
                 </div>
-            )}
+            )
+            }
 
             {/* DETAIL MODAL */}
             <Dialog open={!!selectedDoc} onOpenChange={(open) => !open && setSelectedDoc(null)}>
@@ -709,8 +771,8 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
                                 {selectedDoc.items.map(item => (
                                     <div
                                         key={item.id}
-                                        onClick={() => selectedDoc.type === "ot" && toggleItemDone(item.id)}
-                                        className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${selectedDoc.type === "ot" ? 'cursor-pointer hover:bg-card/80' : ''} ${item.done ? 'bg-emerald-50/50 border-emerald-200' : 'bg-card border-border'}`}
+                                        onClick={() => selectedDoc.type === "ot" && !item.is_paid && toggleItemDone(item.id)}
+                                        className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${selectedDoc.type === "ot" && !item.is_paid ? 'cursor-pointer hover:bg-card/80' : ''} ${item.done ? 'bg-emerald-50/50 border-emerald-200' : 'bg-card border-border'} ${item.is_paid ? 'opacity-80' : ''}`}
                                     >
                                         <div className="flex items-center gap-4">
                                             {/* Checkbox solo visible en OTs */}
@@ -729,6 +791,11 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
                                                         <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-black uppercase">Mano de Obra</span> :
                                                         <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[9px] font-black uppercase">Repuesto</span>
                                                     }
+                                                    {item.is_paid && (
+                                                        <span className="px-1.5 py-0.5 rounded bg-emerald-500 text-white text-[9px] font-black uppercase flex items-center gap-1">
+                                                            <Banknote size={10} /> PAGADO
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <p className="text-xs text-muted-foreground mt-0.5">
                                                     Cantidad: {item.quantity} x ${item.price.toLocaleString("es-CL")}
@@ -838,6 +905,6 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
                     </div>
                 </DialogContent>
             </Dialog>
-        </div>
+        </div >
     );
 }

@@ -125,33 +125,80 @@ def delete_vehicle(vehicle_id: UUID, db: Session = Depends(get_db_session)):
     return {"status": "ok"}
 
 # --- Stats / History ---
+from app.models.base import WorkOrder, SaleItem, WorkOrderItem
 
 @router.get("/{customer_id}/history")
 def get_customer_history(customer_id: UUID, db: Session = Depends(get_db_session)):
     # Get all tickets for this customer
-    tickets = db.query(Ticket).filter(
+    from sqlalchemy.orm import joinedload
+    tickets = db.query(Ticket).options(
+        joinedload(Ticket.items).joinedload(SaleItem.product),
+        joinedload(Ticket.vehicle)
+    ).filter(
         Ticket.customer_id == customer_id,
-        Ticket.state == SaleState.VALIDATED # Only validated sales
-    ).order_by(Ticket.created_at.desc()).all()
+        Ticket.state.in_([SaleState.VALIDATED, SaleState.PAID, SaleState.REFUNDED]) # Show all finalized sales
+    ).order_by(Ticket.date_created.desc()).all()
     
-    history = []
+    sales_history = []
     for t in tickets:
-        history.append({
+        sales_history.append({
             "id": t.id,
             "ticket_number": t.ticket_number,
             "date": t.date_created,
             "total": t.total_amount,
+            "subtotal": t.subtotal,
+            "tax": t.tax_amount,
             "vehicle": t.vehicle.license_plate if t.vehicle else "N/A",
-            "state": t.state
+            "state": t.state.value,
+            "payment_method": t.payment_method,
+            "items": [
+                {
+                    "product_name": item.product.name,
+                    "quantity": item.quantity,
+                    "unit_price": item.unit_price,
+                    "subtotal": item.subtotal,
+                    "discount": item.discount_percent
+                } for item in t.items
+            ]
         })
     
+    # Get Work Orders for this customer
+    work_orders = db.query(WorkOrder).options(
+        joinedload(WorkOrder.vehicle),
+        joinedload(WorkOrder.items).joinedload(WorkOrderItem.product)
+    ).filter(
+        WorkOrder.customer_id == customer_id
+    ).order_by(WorkOrder.created_at.desc()).all()
+
+    ots_history = []
+    for wo in work_orders:
+        ots_history.append({
+            "id": wo.id,
+            "date": wo.created_at,
+            "state": wo.state.value,
+            "vehicle": wo.vehicle.license_plate if wo.vehicle else "N/A",
+            "total": wo.total_amount,
+            "financial_progress": float(wo.financial_progress),
+            "operational_progress": float(wo.operational_progress),
+            "items": [
+                {
+                    "product_name": item.product.name if item.product else "N/A",
+                    "quantity": item.quantity,
+                    "unit_price": item.unit_price,
+                    "subtotal": item.subtotal,
+                    "done": item.done,
+                    "is_paid": item.is_paid
+                } for item in wo.items
+            ]
+        })
+
     # Simple KPIs
     stats = db.query(
         func.count(Ticket.id),
         func.sum(Ticket.total_amount)
     ).filter(
         Ticket.customer_id == customer_id,
-        Ticket.state == SaleState.VALIDATED
+        Ticket.state.in_([SaleState.VALIDATED, SaleState.PAID])
     ).first()
     
     return {
@@ -159,5 +206,6 @@ def get_customer_history(customer_id: UUID, db: Session = Depends(get_db_session
             "total_count": stats[0] or 0,
             "total_amount": stats[1] or 0.0
         },
-        "sales": history
+        "sales": sales_history,
+        "work_orders": ots_history
     }

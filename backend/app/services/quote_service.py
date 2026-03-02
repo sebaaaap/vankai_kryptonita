@@ -26,6 +26,7 @@ class QuoteWorkOrderService:
             customer_id=quote_data.customer_id,
             vehicle_id=quote_data.vehicle_id,
             mileage=quote_data.mileage,
+            service_info=quote_data.service_info,
             state=QuoteState.DRAFT
         )
         db.add(quote)
@@ -86,19 +87,13 @@ class QuoteWorkOrderService:
                     customer_id=quote.customer_id,
                     vehicle_id=quote.vehicle_id,
                     mileage=quote.mileage,
+                    service_info=quote.service_info,
                     state=WorkOrderState.OPEN
                 )
                 db.add(work_order)
                 db.flush()
-                
-                movement = InventoryMovement(
-                    type=MovementType.OUT_SALE,
-                    reason=f"Reserva para OT base cotización {quote.id}"
-                )
-                db.add(movement)
-                db.flush()
 
-                # Add items and discount stock atomically
+                # Add items (we do not deduct stock yet, it is deducted when item is done)
                 for qi in quote.items:
                     wo_item = WorkOrderItem(
                         work_order_id=work_order.id,
@@ -108,48 +103,6 @@ class QuoteWorkOrderService:
                         subtotal=qi.subtotal
                     )
                     db.add(wo_item)
-
-                    # Deduct stock
-                    original_product = db.query(Product).filter(Product.id == qi.product_id).first()
-                    if not original_product:
-                        raise HTTPException(status_code=404, detail=f"Producto {qi.product_id} no encontrado")
-
-                    candidates = db.query(Product).outerjoin(Product.location).filter(
-                        Product.barcode == original_product.barcode,
-                        Product.stock_quantity > 0,
-                        or_(StorageLocation.id == None, StorageLocation.name != "Pasillo Mermas")
-                    ).with_for_update(of=Product).order_by(Product.stock_quantity.desc()).all()
-
-                    total_available = sum(p.stock_quantity for p in candidates)
-
-                    if total_available < qi.quantity:
-                        raise HTTPException(
-                            status_code=400, 
-                            detail=f"Stock insuficiente para {original_product.name}. Disponible: {total_available}"
-                        )
-
-                    qty_remaining = qi.quantity
-
-                    for candidate in candidates:
-                        if qty_remaining <= 0:
-                            break
-
-                        take = min(Decimal(str(candidate.stock_quantity)), Decimal(str(qty_remaining)))
-                        
-                        stock_before = candidate.stock_quantity
-                        candidate.stock_quantity -= take
-                        stock_after = candidate.stock_quantity
-
-                        mov_item = InventoryMovementItem(
-                            movement_id=movement.id,
-                            product_id=candidate.id,
-                            quantity=-take,
-                            stock_before=stock_before,
-                            stock_after=stock_after
-                        )
-                        db.add(mov_item)
-
-                        qty_remaining -= take
                         
             db.commit()
             db.refresh(quote)
@@ -163,13 +116,67 @@ class QuoteWorkOrderService:
             raise HTTPException(status_code=500, detail="Error al aprobar cotización y generar OT")
 
     @staticmethod
+    def consume_item_stock(db: Session, wo_item: WorkOrderItem, wo: WorkOrder):
+        movement = InventoryMovement(
+            type=MovementType.OUT_SALE,
+            reason=f"Consumo OT {wo.id} - Item {wo_item.id}"
+        )
+        db.add(movement)
+        db.flush()
+
+        original_product = db.query(Product).filter(Product.id == wo_item.product_id).first()
+        if not original_product:
+            raise HTTPException(status_code=404, detail=f"Producto {wo_item.product_id} no encontrado")
+
+        if original_product.product_type == "SERVICE":
+            return # Services don't deduct stock
+
+        candidates = db.query(Product).outerjoin(Product.location).filter(
+            Product.barcode == original_product.barcode,
+            Product.stock_quantity > 0,
+            or_(StorageLocation.id == None, StorageLocation.name != "Pasillo Mermas")
+        ).with_for_update(of=Product).order_by(Product.stock_quantity.desc()).all()
+
+        total_available = sum(p.stock_quantity for p in candidates)
+
+        if total_available < wo_item.quantity:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Stock insuficiente para {original_product.name}. Disponible: {total_available}"
+            )
+
+        qty_remaining = wo_item.quantity
+
+        for candidate in candidates:
+            if qty_remaining <= 0:
+                break
+
+            take = min(Decimal(str(candidate.stock_quantity)), Decimal(str(qty_remaining)))
+            
+            stock_before = candidate.stock_quantity
+            candidate.stock_quantity -= take
+            stock_after = candidate.stock_quantity
+
+            mov_item = InventoryMovementItem(
+                movement_id=movement.id,
+                product_id=candidate.id,
+                quantity=-take,
+                stock_before=stock_before,
+                stock_after=stock_after
+            )
+            db.add(mov_item)
+
+            qty_remaining -= take
+
+
+    @staticmethod
     def get_active_work_orders(db: Session):
         return db.query(WorkOrder).filter(
             WorkOrder.state.in_([WorkOrderState.OPEN, WorkOrderState.IN_PROGRESS, WorkOrderState.READY])
         ).all()
 
     @staticmethod
-    def add_payment(db: Session, wo_id: UUID, payment_data: WorkOrderPaymentCreate, session_id: UUID) -> tuple[WorkOrderPayment, Decimal]:
+    def add_payment(db: Session, wo_id: UUID, payment_data: WorkOrderPaymentCreate, session_id: UUID) -> tuple[Ticket, Decimal]:
         with db.begin_nested():
             wo = db.query(WorkOrder).filter(WorkOrder.id == wo_id).with_for_update().first()
             if not wo:
@@ -180,23 +187,95 @@ class QuoteWorkOrderService:
                 raise HTTPException(status_code=400, detail="La sesión de caja no está abierta o es inválida")
                 
             total_items = sum(item.subtotal for item in wo.items)
-            total_payments = sum(p.amount for p in wo.payments)
+            total_payments = sum(t.total_amount for t in wo.tickets if t.state in (SaleState.PAID, SaleState.VALIDATED) and not t.is_refunded)
             balance = total_items - total_payments
             
             if payment_data.amount > balance:
                 raise HTTPException(status_code=400, detail=f"El monto a pagar ({payment_data.amount}) supera el saldo pendiente ({balance})")
 
-            pm_enum = PaymentMethod[payment_data.payment_method.upper()]
+            # Try to match by value first (common for coming from frontend as string)
+            pm_enum = None
+            pm_map = {
+                "efectivo": PaymentMethod.CASH,
+                "tarjeta": PaymentMethod.CARD,
+                "transferencia": PaymentMethod.TRANSFER,
+                "mixto": PaymentMethod.MIXED
+            }
+            
+            # Look up in our map or directly in Enum values/keys
+            pm_lower = payment_data.payment_method.lower()
+            if pm_lower in pm_map:
+                pm_enum = pm_map[pm_lower]
+            else:
+                for pm in PaymentMethod:
+                    if pm.value == pm_lower:
+                        pm_enum = pm
+                        break
+            
+            # Fallback to key lookup
+            if not pm_enum:
+                try:
+                    pm_enum = PaymentMethod[payment_data.payment_method.upper()]
+                except KeyError:
+                    raise HTTPException(status_code=400, detail=f"Método de pago inválido: {payment_data.payment_method}")
 
-            payment = WorkOrderPayment(
-                work_order_id=wo.id,
+            # We generate an OT_PAYMENT Ticket 
+            ticket = Ticket(
+                ticket_number=POSService.generate_ticket_number(db),
+                state=SaleState.VALIDATED,
+                subtotal=payment_data.amount,
+                tax_amount=Decimal('0'), # Assuming taxes are calculated at item level, simple amount here
+                total_amount=payment_data.amount,
+                payment_method=payment_data.payment_method,
                 session_id=session_id,
-                amount=payment_data.amount,
-                payment_method=pm_enum
+                customer_id=wo.customer_id,
+                vehicle_id=wo.vehicle_id,
+                work_order_id=wo.id,
+                ticket_type="OT_PAYMENT"
             )
-            db.add(payment)
+            db.add(ticket)
             db.flush()
             
+            # Create the Payment record
+            from app.models.base import Payment
+            pago = Payment(
+                ticket_id=ticket.id,
+                payment_method=pm_enum,
+                amount=payment_data.amount
+            )
+            db.add(pago)
+
+            # Mark items as paid if provided AND create SaleItem records for the Ticket
+            if payment_data.item_ids:
+                from app.models.base import WorkOrderItem, SaleItem
+                wo_items = db.query(WorkOrderItem).filter(
+                    WorkOrderItem.id.in_(payment_data.item_ids),
+                    WorkOrderItem.work_order_id == wo.id
+                ).all()
+                
+                for woi in wo_items:
+                    woi.is_paid = True
+                    # Create a detail item for the POS ticket
+                    sale_item = SaleItem(
+                        ticket_id=ticket.id,
+                        product_id=woi.product_id,
+                        quantity=woi.quantity,
+                        unit_price=woi.unit_price,
+                        subtotal=woi.subtotal,
+                        discount_percent=Decimal('0')
+                    )
+                    db.add(sale_item)
+            else:
+                # If it's a generic payment (lump sum), we could create a dummy item or just leave it.
+                # But usually, if they selection items in the UI, we'll have item_ids.
+                pass
+
+            # auto-complete OT if all items are paid
+            db.flush()
+            all_items_paid = all(item.is_paid for item in wo.items)
+            if all_items_paid and wo.items:
+                wo.state = WorkOrderState.COMPLETED
+
             new_balance = balance - payment_data.amount
             
             # Update session totals
@@ -209,45 +288,15 @@ class QuoteWorkOrderService:
             elif pm_enum == PaymentMethod.MIXED:
                 cash_session.total_sales_cash += payment_data.amount
                 
-            # If paid off completely, finish WO and generate Ticket
+            # If paid off completely, finish WO if operationally done
             if new_balance == Decimal('0'):
-                wo.state = WorkOrderState.COMPLETED
+                done_count = sum(1 for i in wo.items if i.done)
+                if done_count == len(wo.items) and len(wo.items) > 0:
+                    wo.state = WorkOrderState.COMPLETED
                 
-                subtotal = sum(item.subtotal for item in wo.items)
-                
-                # Approximate backward tax extraction mapping like POSService
-                tax_amount = subtotal * Decimal('0.19') # Note: this logic depends on if unit_price in WO was with or without TAX. Let's assume inclusive.
-                total = subtotal
-                tax_amount = round(total * Decimal('0.19'), 2)
-                subtotal_net = round(total - tax_amount, 2)
-                
-                ticket = Ticket(
-                    ticket_number=POSService.generate_ticket_number(db),
-                    state=SaleState.VALIDATED, # Assuming finished WO makes sale practically done
-                    subtotal=subtotal_net,
-                    tax_amount=tax_amount,
-                    total_amount=total,
-                    payment_method=payment_data.payment_method,
-                    session_id=session_id,
-                    customer_id=wo.customer_id,
-                    vehicle_id=wo.vehicle_id
-                )
-                db.add(ticket)
-                db.flush()
-                
-                for item in wo.items:
-                    sale_item = SaleItem(
-                        ticket_id=ticket.id,
-                        product_id=item.product_id,
-                        quantity=item.quantity,
-                        unit_price=item.unit_price,
-                        subtotal=item.subtotal
-                    )
-                    db.add(sale_item)
-
         db.commit()
-        db.refresh(payment)
-        return payment, new_balance
+        db.refresh(ticket)
+        return ticket, new_balance
 
     @staticmethod
     def get_wo_balance(db: Session, wo_id: UUID):
@@ -256,7 +305,7 @@ class QuoteWorkOrderService:
             raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
             
         total_items = sum(item.subtotal for item in wo.items)
-        total_payments = sum(p.amount for p in wo.payments)
+        total_payments = sum(t.total_amount for t in wo.tickets if t.state in (SaleState.PAID, SaleState.VALIDATED) and not t.is_refunded)
         balance = total_items - total_payments
         
         return {
@@ -265,3 +314,31 @@ class QuoteWorkOrderService:
             "total_payments": total_payments,
             "balance": balance
         }
+
+    @staticmethod
+    def delete_quote(db: Session, quote_id: UUID):
+        quote = db.query(Quote).filter(Quote.id == quote_id).first()
+        if not quote:
+            raise HTTPException(status_code=404, detail="Cotización no encontrada")
+        
+        # If it has an associated work order, we might want to prevent deletion or delete both.
+        # For now, let's just delete the quote (cascade handles items)
+        db.delete(quote)
+        db.commit()
+        return True
+
+    @staticmethod
+    def delete_work_order(db: Session, wo_id: UUID):
+        wo = db.query(WorkOrder).filter(WorkOrder.id == wo_id).first()
+        if not wo:
+            raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+        
+        # Prevent deletion if there are payments
+        active_tickets = [t for t in wo.tickets if t.state in (SaleState.PAID, SaleState.VALIDATED) and not t.is_refunded]
+        if active_tickets:
+            raise HTTPException(status_code=400, detail="No se puede eliminar una orden que tiene abonos realizados. Revierta los abonos primero.")
+        
+        db.delete(wo)
+        db.commit()
+        return True
+

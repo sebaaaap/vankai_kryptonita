@@ -61,16 +61,18 @@ def db(setup_database):
 def client(db):
     """
     TestClient de FastAPI compatible con httpx 0.28+.
-    httpx 0.28 cambió el constructor interno, lo que rompe el context manager
-    'with TestClient(app) as c'. Usamos instanciación directa + cleanup manual.
+    IMPORTANTE: El override debe ser sobre get_db_session (no get_db),
+    que es la dependencia que usan los endpoints reales.
     """
+    from app.database import get_db_session
+
     def override_get_db():
         try:
             yield db
         finally:
             pass
 
-    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_db_session] = override_get_db
     # Instanciación directa: compatible con starlette 0.36 + httpx 0.28
     test_client = TestClient(app, raise_server_exceptions=False)
     yield test_client

@@ -59,7 +59,11 @@ def ventas_y_sesion(db, cliente_con_vehiculo):
     Crea 2 ventas validadas para el cliente con totales conocidos.
     Total esperado: $10.000 + $15.000 = $25.000
     """
-    sesion = CashSession(name="Caja Reporte", initial_cash=50000)
+    from app.models.base import CashRegister
+    caja = CashRegister(name="Caja Reporte")
+    db.add(caja)
+    db.flush()
+    sesion = CashSession(cash_register_id=caja.id, opening_balance=50000, user_id="admin_test")
     db.add(sesion)
 
     prod = Product(

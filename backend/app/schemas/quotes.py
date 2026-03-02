@@ -27,6 +27,7 @@ class QuoteCreate(BaseModel):
     vehicle_id: Optional[UUID] = None
     mileage: Optional[Decimal] = None
     items: List[QuoteItemCreate]
+    service_info: Optional[dict] = None
 
 class QuoteResponse(BaseModel):
     id: UUID
@@ -35,6 +36,7 @@ class QuoteResponse(BaseModel):
     total: Decimal
     mileage: Optional[Decimal] = None
     state: str
+    service_info: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
     items: List[QuoteItemResponse] = []

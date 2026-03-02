@@ -315,7 +315,11 @@ def aceite_con_stock_limitado(db):
     )
     db.add(aceite)
 
-    sesion = CashSession(name="Caja Taller", initial_cash=100000)
+    from app.models.base import CashRegister
+    caja = CashRegister(name="Caja Taller")
+    db.add(caja)
+    db.flush()
+    sesion = CashSession(cash_register_id=caja.id, opening_balance=100000, user_id="admin_test")
     db.add(sesion)
     db.commit()
 

@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean, Enum, Text, Numeric
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean, Enum, Text, Numeric, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
@@ -183,6 +183,7 @@ class Vehicle(BaseModel):
     vehicle_type = Column(Enum(VehicleType), default=VehicleType.automovil)
     color = Column(String, nullable=True)
     vin = Column(String, nullable=True)
+    service_info = Column(JSON, nullable=True) # Datos de lubricentro
     
     customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False)
     owner = relationship("Customer", back_populates="vehicles")
@@ -211,6 +212,10 @@ class Ticket(BaseModel):
     
     customer = relationship("Customer", back_populates="tickets")
     vehicle = relationship("Vehicle", back_populates="tickets")
+    
+    work_order_id = Column(UUID(as_uuid=True), ForeignKey("work_orders.id"), nullable=True, index=True)
+    ticket_type = Column(String, default="DIRECT_SALE") # DIRECT_SALE, OT_PAYMENT
+    work_order = relationship("WorkOrder", back_populates="tickets")
     
     is_refunded = Column(Boolean, default=False)
     refund_ticket_id = Column(UUID(as_uuid=True), ForeignKey("tickets.id"), nullable=True)
@@ -346,6 +351,7 @@ class Quote(BaseModel):
     total = Column(Numeric(12, 2), default=0.0)
     mileage = Column(Numeric(12, 2), nullable=True)
     state = Column(Enum(QuoteState), default=QuoteState.DRAFT, nullable=False)
+    service_info = Column(JSON, nullable=True) # Datos de lubricentro vinculados a esta cotización
     
     customer = relationship("Customer", backref="quotes")
     vehicle = relationship("Vehicle", backref="quotes")
@@ -385,16 +391,49 @@ class WorkOrder(BaseModel):
     mileage = Column(Numeric(12, 2), nullable=True) # kilometraje
     notes = Column(Text, nullable=True)
     assigned_user_id = Column(String, nullable=True) # mecanico asignado
+    service_info = Column(JSON, nullable=True) # Datos de lubricentro vinculados a esta OT
     
     quote = relationship("Quote", back_populates="work_order")
     customer = relationship("Customer")
     vehicle = relationship("Vehicle")
     items = relationship("WorkOrderItem", back_populates="work_order", cascade="all, delete-orphan")
-    payments = relationship("WorkOrderPayment", back_populates="work_order", cascade="all, delete-orphan")
+    legacy_payments = relationship("WorkOrderPayment", back_populates="work_order", cascade="all, delete-orphan")
+    tickets = relationship("Ticket", back_populates="work_order")
 
     @property
     def total_amount(self):
         return sum(item.subtotal for item in self.items)
+
+    @property
+    def payments(self):
+        # Maps ticket to a dict resembling WorkOrderPaymentResponse
+        return [
+            {
+                "id": t.id,
+                "session_id": t.session_id,
+                "amount": t.total_amount,
+                "payment_method": t.payment_method,
+                "date_created": t.date_created
+            }
+            for t in self.tickets if t.state in (SaleState.PAID, SaleState.VALIDATED) and not t.is_refunded
+        ]
+        
+    @property
+    def financial_progress(self):
+        from decimal import Decimal
+        total = self.total_amount
+        if total <= 0: 
+            return Decimal("100.0") if self.items else Decimal("0.0")
+        paid = sum(t.total_amount for t in self.tickets if t.state in (SaleState.PAID, SaleState.VALIDATED) and not t.is_refunded)
+        return min((paid / total) * Decimal("100.0"), Decimal("100.0"))
+
+    @property
+    def operational_progress(self):
+        from decimal import Decimal
+        if not self.items: 
+            return Decimal("0.0")
+        done_count = sum(1 for i in self.items if i.done)
+        return (Decimal(done_count) / Decimal(len(self.items))) * Decimal("100.0")
 
 class WorkOrderItem(BaseModel):
     __tablename__ = "work_order_items"
@@ -405,6 +444,7 @@ class WorkOrderItem(BaseModel):
     unit_price = Column(Numeric(12, 2), nullable=False)
     subtotal = Column(Numeric(12, 2), nullable=False)
     done = Column(Boolean, default=False, nullable=False)
+    is_paid = Column(Boolean, default=False, nullable=False)
     
     work_order = relationship("WorkOrder", back_populates="items")
     product = relationship("Product")
@@ -428,5 +468,5 @@ class WorkOrderPayment(BaseModel):
     payment_method = Column(Enum(PaymentMethod), nullable=False)
     date_created = Column(DateTime(timezone=True), default=func.now())
     
-    work_order = relationship("WorkOrder", back_populates="payments")
+    work_order = relationship("WorkOrder", back_populates="legacy_payments")
     session = relationship("CashSession")
