@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Plus, Search, FileText, CheckCircle, XCircle, Clock, Wrench, LayoutGrid, List, Printer, Send, X, CheckSquare, Square, Mail, Download, Banknote, Trash2 } from "lucide-react";
+import { Plus, Search, FileText, CheckCircle, XCircle, Clock, Wrench, LayoutGrid, List, Printer, Send, X, CheckSquare, Square, Mail, Download, Banknote, Trash2, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { DocumentTemplate } from "./DocumentTemplate";
@@ -661,6 +661,16 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
+                                {selectedDoc.type === "ot" && (
+                                    <button
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors text-xs font-bold shadow-md"
+                                        title="Abrir Ficha de Recepción"
+                                        onClick={() => { setSelectedDoc(null); router.push(`/quotes-reception?id=${selectedDoc.id}`); }}
+                                    >
+                                        <ClipboardList size={15} />
+                                        <span className="hidden sm:inline">Ficha Recepción</span>
+                                    </button>
+                                )}
                                 <button className="p-2 bg-primary-foreground/10 text-primary-foreground rounded-lg hover:bg-primary-foreground/20 transition-colors" title="Imprimir" onClick={() => toast.info("Generando impresión local...")}>
                                     <Printer size={18} />
                                 </button>

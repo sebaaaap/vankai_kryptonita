@@ -2,6 +2,7 @@ import React from "react"
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { AuthProvider } from '@/contexts/AuthContext'
+import { Toaster } from 'sonner'
 
 import './globals.css'
 
@@ -22,6 +23,7 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased`}>
         <AuthProvider>
           {children}
+          <Toaster position="top-right" richColors closeButton />
         </AuthProvider>
       </body>
     </html>

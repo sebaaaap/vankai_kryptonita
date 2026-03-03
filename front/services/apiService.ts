@@ -219,5 +219,34 @@ export const apiService = {
 
     async deleteWorkOrder(woId: string): Promise<void> {
         await api.delete(`/ot/${woId}`);
-    }
+    },
+
+    // ── Reception Card ────────────────────────────────────────────────────────
+    async getReception(woId: string): Promise<any> {
+        const response = await api.get(`/ot/${woId}/reception`);
+        return response.data;
+    },
+
+    async saveReception(woId: string, formData: any): Promise<any> {
+        const response = await api.put(`/ot/${woId}/reception`, formData);
+        return response.data;
+    },
+
+    async exportReceptionPdf(woId: string, formData: any): Promise<Blob> {
+        const response = await api.post(`/ot/${woId}/reception/pdf`, formData, {
+            responseType: "blob",
+        });
+        return response.data;
+    },
+
+    async uploadDamagePhoto(otId: string, file: File, section = "recepcion"): Promise<{ url: string }> {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("ot_id", otId);
+        form.append("section", section);
+        const response = await api.post(`/ot/upload-photo`, form, {
+            headers: { "Content-Type": "multipart/form-data" },
+        });
+        return response.data;
+    },
 };
