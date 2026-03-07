@@ -400,6 +400,7 @@ function OperationsTab() {
 function CategoriesTab() {
     const [categories, setCategories] = useState<Category[]>([]);
     const [newName, setNewName] = useState("");
+    const [newColor, setNewColor] = useState("");
 
     useEffect(() => {
         fetchCategories();
@@ -416,10 +417,23 @@ function CategoriesTab() {
         e.preventDefault();
         if (!newName.trim()) return;
         try {
-            await api.post('/categories/', { name: newName.trim() });
+            const payload: any = { name: newName.trim() };
+            if (newColor) payload.color = newColor;
+
+            await api.post('/categories/', payload);
             setNewName("");
+            setNewColor("");
             fetchCategories();
         } catch { }
+    };
+
+    const handleUpdateColor = async (id: string, color: string) => {
+        try {
+            await api.put(`/categories/${id}`, { color });
+            setCategories(prev => prev.map(c => c.id === id ? { ...c, color } : c));
+        } catch (e: any) {
+            console.error("Error actualizando color", e);
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -443,17 +457,53 @@ function CategoriesTab() {
                 </div>
 
                 <form onSubmit={handleCreate} className="space-y-5">
-                    <div>
-                        <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
-                            Nombre de Entidad
-                        </label>
-                        <input
-                            className="form-input text-base font-medium"
-                            placeholder="Ej: Repuestos de Motor"
-                            value={newName}
-                            onChange={(e) => setNewName(e.target.value)}
-                            required
-                        />
+                    <div className="flex gap-4">
+                        <div className="flex-1">
+                            <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
+                                Nombre de Entidad
+                            </label>
+                            <input
+                                className="form-input text-base font-medium"
+                                placeholder="Ej: Repuestos de Motor"
+                                value={newName}
+                                onChange={(e) => setNewName(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="w-24 shrink-0">
+                            <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
+                                Color Asignado
+                            </label>
+                            <div className="flex items-center justify-center p-1 rounded-xl border border-border h-10 w-full bg-background transition-colors focus-within:border-primary">
+                                {newColor ? (
+                                    <div className="relative w-full h-full flex items-center justify-center">
+                                        <input
+                                            type="color"
+                                            value={newColor}
+                                            onChange={(e) => setNewColor(e.target.value)}
+                                            className="w-full h-full p-0 border-0 bg-transparent cursor-pointer rounded-lg relative z-10"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setNewColor("")}
+                                            className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center z-20 hover:bg-red-600 transition-colors shadow-sm"
+                                            title="Auto-asignar Color"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => setNewColor("#e11d48")} // Color de inicio al querer asignarlo manual
+                                        className="w-full h-full text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-muted rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
+                                        title="Click para escoger manualmente"
+                                    >
+                                        Auto
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                     </div>
                     <button
                         type="submit"
@@ -508,17 +558,24 @@ function CategoriesTab() {
                                         </div>
                                     </td>
                                     <td className="px-5 py-3.5 text-center">
-                                        {cat.color ? (
-                                            <div className="flex items-center justify-center gap-2">
-                                                <div
-                                                    className="w-4 h-4 rounded-full border border-border shadow-sm"
-                                                    style={{ backgroundColor: cat.color }}
+                                        <div className="flex items-center justify-center gap-2 group/color">
+                                            <div className="relative w-6 h-6 rounded-full overflow-hidden border border-border shadow-sm cursor-pointer hover:scale-110 hover:shadow-md transition-all">
+                                                <input
+                                                    type="color"
+                                                    value={cat.color || "#cccccc"}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, color: val } : c));
+                                                    }}
+                                                    onBlur={(e) => handleUpdateColor(cat.id, e.target.value)}
+                                                    className="absolute -top-2 -left-2 w-10 h-10 cursor-pointer pointer-events-auto"
+                                                    title="Modificar Color"
                                                 />
-                                                <span className="text-[10px] font-mono text-muted-foreground">{cat.color}</span>
                                             </div>
-                                        ) : (
-                                            <span className="text-[10px] text-muted-foreground italic">Auto-asignado</span>
-                                        )}
+                                            <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-md">
+                                                {cat.color || "#Auto"}
+                                            </span>
+                                        </div>
                                     </td>
                                     <td className="px-5 py-3.5 text-center">
                                         <button

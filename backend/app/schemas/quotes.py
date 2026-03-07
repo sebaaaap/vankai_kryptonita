@@ -28,6 +28,7 @@ class QuoteCreate(BaseModel):
     mileage: Optional[Decimal] = None
     items: List[QuoteItemCreate]
     service_info: Optional[dict] = None
+    is_ot: bool = False
 
 class QuoteResponse(BaseModel):
     id: UUID

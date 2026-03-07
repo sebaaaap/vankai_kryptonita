@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List
@@ -39,9 +39,9 @@ def delete_quote(quote_id: UUID, db: Session = Depends(get_db_session)):
     return {"message": "Cotización eliminada correctamente"}
 
 @router.get("/pos/active-orders", response_model=List[WorkOrderResponse])
-def get_active_orders(db: Session = Depends(get_db_session)):
+def get_active_orders(pos_only: bool = Query(False), db: Session = Depends(get_db_session)):
     """Recupera todas las OTs activas (abierta, en progreso, lista)."""
-    return QuoteWorkOrderService.get_active_work_orders(db)
+    return QuoteWorkOrderService.get_active_work_orders(db, pos_only=pos_only)
 
 @router.post("/ot/{wo_id}/payments", response_model=WorkOrderPaymentResponse)
 def add_work_order_payment(
@@ -92,8 +92,6 @@ def update_ot_items_done(
             WorkOrderItem.work_order_id == wo_id
         ).first()
         if item:
-            if done and not item.done:
-                QuoteWorkOrderService.consume_item_stock(db, item, wo)
             item.done = done
             updated += 1
     
@@ -127,11 +125,19 @@ def update_ot_state(
         "OPEN": WorkOrderState.OPEN,
         "IN_PROGRESS": WorkOrderState.IN_PROGRESS,
         "READY": WorkOrderState.READY,
+        "COMPLETED": WorkOrderState.COMPLETED,
     }
     new_state = state_map.get(state)
     if not new_state:
         raise HTTPException(status_code=400, detail=f"Estado inválido: {state}")
     
+    if new_state == WorkOrderState.COMPLETED:
+        # Finalizar OT: consumir stock de TODOS los items que no lo hayan hecho aún
+        for item in wo.items:
+            if not item.stock_consumed:
+                QuoteWorkOrderService.consume_item_stock(db, item, wo)
+            item.done = True  # Marcar todos como completados
+                
     wo.state = new_state
     db.commit()
     return {"id": str(wo.id), "state": wo.state.value}

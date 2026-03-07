@@ -14,7 +14,7 @@ from app.core.utils import round_decimal
 from app.models.base import (
     Ticket, SaleItem, Payment, Product, CashSession, 
     InventoryMovement, InventoryMovementItem,
-    SaleState, PaymentMethod, MovementType, RefundReason, StorageLocation
+    SaleState, PaymentMethod, MovementType, RefundReason, StorageLocation, ProductType
 )
 from app.schemas.pos import (
     SaleCreate, SaleResponse, SaleItemCreate, PaymentCreate,
@@ -111,6 +111,15 @@ class POSService:
                     original_product = db.query(Product).filter(Product.id == item.product_id).first()
                     if not original_product:
                         raise HTTPException(status_code=404, detail=f"Producto {item.product_id} no encontrado")
+
+                    if original_product.product_type == ProductType.SERVICE:
+                        final_items_to_create.append({
+                            "product_id": original_product.id,
+                            "quantity": Decimal(str(item.quantity)),
+                            "price": Decimal(str(item.price)),
+                            "discount_percent": Decimal(str(item.discount_percent)) if item.discount_percent else Decimal('0')
+                        })
+                        continue
 
                     from sqlalchemy import or_
                     # Bloqueo preventivo (with_for_update)
@@ -309,6 +318,20 @@ class POSService:
         if original_ticket.is_refunded:
             raise HTTPException(status_code=400, detail="Este ticket ya fue reembolsado")
         
+        # --- NUEVO: Validar que no hay servicios si se intenta gestionar stock/mermas ---
+        for item_data in refund_data.items:
+            product = db.query(Product).filter(Product.id == item_data.product_id).first()
+            if product and product.product_type == ProductType.SERVICE:
+                # Si el usuario eligió una razón que implica movimiento físico o intentó forzarlo 
+                # (aunque para servicios el backend lo ignora), lanzamos el error solicitado.
+                if refund_data.refund_reason == RefundReason.RETURN_TO_STOCK or not refund_data.return_to_stock:
+                     # El usuario dijo: "un servicio no se puede enviar ni a estock ni a mermas"
+                     # Si es merma (return_to_stock=False) o devolución stock (Reason)
+                     raise HTTPException(
+                         status_code=400, 
+                         detail=f"El ítem '{product.name}' es un SERVICIO y no es inventariable. No se puede enviar a stock ni a mermas."
+                     )
+        
         # Crear nota de crédito (venta negativa)
         credit_note = Ticket(
             ticket_number=POSService.generate_ticket_number(db, prefix="NC"),
@@ -359,6 +382,9 @@ class POSService:
         for item in refund_data.items:
             product = db.query(Product).filter(Product.id == item.product_id).first()
             if product:
+                if product.product_type == ProductType.SERVICE:
+                    continue
+                
                 stock_before = product.stock_quantity
 
                 if refund_data.return_to_stock:
@@ -425,6 +451,7 @@ class POSService:
         
         # Marcar ticket original como reembolsado
         original_ticket.is_refunded = True
+        original_ticket.state = SaleState.REFUNDED
         original_ticket.refund_ticket_id = credit_note.id
         
         # --- NUEVO: Actualizar totales de la sesión para el reembolso ---

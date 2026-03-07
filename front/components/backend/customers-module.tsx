@@ -701,6 +701,48 @@ export default function CustomersModule({ onBack }: CustomersModuleProps) {
                                     </div>
                                 </div>
 
+                                {/* Tickets de Pago (Abonos) */}
+                                {selectedOt.tickets && selectedOt.tickets.length > 0 && (
+                                    <div className="space-y-4">
+                                        <h4 className="text-xs font-black uppercase text-slate-900 border-b pb-2 flex items-center gap-2">
+                                            <Banknote className="w-4 h-4 text-emerald-500" />
+                                            Abonos y Pagos Recibidos
+                                        </h4>
+                                        <div className="rounded-2xl border border-emerald-200 overflow-hidden">
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-emerald-50 border-b border-emerald-100">
+                                                    <tr className="text-[10px] font-black uppercase text-emerald-700">
+                                                        <th className="px-4 py-3 text-left">Nº Ticket</th>
+                                                        <th className="px-4 py-3 text-center">Fecha</th>
+                                                        <th className="px-4 py-3 text-center">Método</th>
+                                                        <th className="px-4 py-3 text-right">Monto</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-emerald-50">
+                                                    {selectedOt.tickets.map((t: any, idx: number) => (
+                                                        <tr key={idx} className="hover:bg-emerald-50/50 bg-white">
+                                                            <td className="px-4 py-3 font-bold text-slate-900">{t.ticket_number}</td>
+                                                            <td className="px-4 py-3 text-center text-xs text-slate-500 font-medium">
+                                                                {new Date(t.date).toLocaleDateString()}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                <Badge variant="outline" className="text-[10px] uppercase font-bold text-emerald-600 border-emerald-200">{t.payment_method}</Badge>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right font-black text-emerald-600">${t.amount?.toLocaleString()}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                                <tfoot className="bg-emerald-50 border-t border-emerald-100 font-black text-emerald-800">
+                                                    <tr>
+                                                        <td colSpan={3} className="px-4 py-3 text-right uppercase text-[10px] tracking-wider">Total Abonado</td>
+                                                        <td className="px-4 py-3 text-right">${selectedOt.tickets.reduce((acc: number, t: any) => acc + t.amount, 0).toLocaleString()}</td>
+                                                    </tr>
+                                                </tfoot>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Gran Total OT */}
                                 <div className="flex justify-between items-center p-6 bg-slate-900 text-white rounded-3xl shadow-xl">
                                     <div>

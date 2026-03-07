@@ -67,10 +67,10 @@ export function PdvHeader({
   const [searchTerm, setSearchTerm] = useState("")
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false)
 
-  // Fetch active OTs to show indicators
-  const { data: activeOts } = useSWR("/pos/active-orders", async () => {
+  // Fetch active OTs to show indicators (only those with pending balance)
+  const { data: activeOts } = useSWR("/pos/active-orders?pos_only=true", async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/pos/active-orders`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/pos/active-orders?pos_only=true`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       return response.json();

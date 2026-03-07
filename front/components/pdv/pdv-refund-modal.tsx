@@ -87,7 +87,7 @@ export function PdvRefundModal({ open, order, onClose, onConfirm }: PdvRefundMod
         const price = toNum(line.unitPrice || line.product.price || (toNum(line.subtotal) / toNum(line.quantity)) || 0)
         const discount = toNum(line.discount || 0)
         return acc + (qty * price * (1 - discount / 100))
-    }, 0) * 1.19 // Including Tax (IVA 19%)
+    }, 0) // Prices already include IVA according to backend model
 
     const handleConfirm = async () => {
         const items = order.lines
@@ -207,6 +207,15 @@ export function PdvRefundModal({ open, order, onClose, onConfirm }: PdvRefundMod
                         </div>
                     </div>
 
+                    {order.lines.some(l => (selectedItems[l.id] || 0) > 0 && (l.product.productType === "SERVICE" || String(l.product.categoryId).toLowerCase().includes("serv"))) && (
+                        <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 flex items-start gap-2">
+                            <Info className="h-4 w-4 text-amber-600 mt-0.5" />
+                            <p className="text-[11px] text-amber-800">
+                                Estás reembolsando un <strong>SERVICIO</strong>. Los servicios no son inventariables y no afectarán el stock físico.
+                            </p>
+                        </div>
+                    )}
+
                     <div className="bg-slate-900/5 p-4 rounded-2xl border border-slate-200">
                         <div className="flex justify-between items-center">
                             <span className="text-slate-500 text-sm font-bold">Total a Reembolsar</span>
@@ -228,6 +237,6 @@ export function PdvRefundModal({ open, order, onClose, onConfirm }: PdvRefundMod
                     </Button>
                 </DialogFooter>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     )
 }

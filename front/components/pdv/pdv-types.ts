@@ -9,6 +9,7 @@ export interface Product {
   tax: number // percentage
   color: string
   unit?: string // "pza", "lt", "servicio", etc.
+  productType?: string // "SERVICE", "STORABLE"
 }
 
 export interface Category {

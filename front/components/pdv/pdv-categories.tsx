@@ -43,7 +43,7 @@ export function PdvCategories({
             key={category.id}
             type="button"
             onClick={() => onSelectCategory(category.id)}
-            className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-semibold transition-all relative overflow-hidden border ${isActive
+            className={`shrink-0 flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-semibold transition-all relative overflow-hidden border ${isActive
               ? "text-white shadow-md shadow-primary/10"
               : "bg-background text-muted-foreground hover:text-foreground shadow-sm"
               }`}

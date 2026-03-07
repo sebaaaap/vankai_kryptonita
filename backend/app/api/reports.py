@@ -10,7 +10,7 @@ from app.models.base import (
     Product, ProductCategory, StorageLocation, 
     Ticket, SaleItem, SaleState, Payment, PaymentMethod,
     Purchase, PurchaseItem, Supplier, PurchaseState,
-    CashSession, InventoryMovement, MovementType
+    CashSession, InventoryMovement, MovementType, ProductType
 )
 
 router = APIRouter()
@@ -263,8 +263,11 @@ def get_inventory_summary(
     category: Optional[str] = None,
     db: Session = Depends(get_db_session)
 ):
-    # Query Products
-    q = db.query(Product).filter(Product.is_active == True)
+    # Query Products (Excluyendo SERVICIOS)
+    q = db.query(Product).filter(
+        Product.is_active == True,
+        Product.product_type != ProductType.SERVICE
+    )
     
     if category and category != "all":
         q = q.join(ProductCategory).filter(ProductCategory.name == category)

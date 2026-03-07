@@ -56,13 +56,13 @@ export function PdvProductGrid({
         ) : (
           <div className="grid grid-cols-2 gap-3 pb-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
             {filteredProducts.map((product) => {
-              const isService = product.categoryId === "servicios" || String(product.categoryId).toLowerCase().includes("serv")
+              const isService = product.productType === "SERVICE" || product.categoryId === "servicios" || String(product.categoryId).toLowerCase().includes("serv")
               return (
                 <button
                   key={product.id}
                   type="button"
                   onClick={() => onAddProduct(product)}
-                  disabled={product.stock <= 0}
+                  disabled={product.stock <= 0 && !isService}
                   className={`group relative flex flex-col items-start rounded-xl border p-3.5 text-left transition-all hover:brightness-95 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed`}
                   style={{
                     backgroundColor: `${product.color}15`,

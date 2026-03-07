@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db_session
 from app.models.base import ProductCategory
-from app.schemas.categories import CategoryCreate, CategoryResponse
+from app.schemas.categories import CategoryCreate, CategoryResponse, CategoryUpdate
 from typing import List
 
 import random
@@ -55,7 +55,45 @@ def create_category(data: CategoryCreate, db: Session = Depends(get_db_session))
 
 @router.get("/", response_model=List[CategoryResponse])
 def list_categories(db: Session = Depends(get_db_session)):
-    return db.query(ProductCategory).all()
+    categories = db.query(ProductCategory).all()
+    
+    needs_commit = False
+    used_colors = [c.color for c in categories if c.color]
+    
+    for cat in categories:
+        if not cat.color:
+            available_predefined = [c for c in PREDEFINED_PASTELS if c not in used_colors]
+            if available_predefined:
+                chosen = random.choice(available_predefined)
+                cat.color = chosen
+                used_colors.append(chosen)
+            else:
+                chosen = generate_pastel_color()
+                cat.color = chosen
+                used_colors.append(chosen)
+            needs_commit = True
+            
+    if needs_commit:
+        db.commit()
+        
+    return categories
+
+@router.put("/{category_id}", response_model=CategoryResponse)
+def update_category(category_id: UUID, data: CategoryUpdate, db: Session = Depends(get_db_session)):
+    db_obj = db.query(ProductCategory).filter(ProductCategory.id == category_id).first()
+    if not db_obj:
+        raise HTTPException(status_code=404, detail="Categoría no encontrada")
+    
+    if data.name is not None:
+        db_obj.name = data.name
+    if data.color is not None:
+        db_obj.color = data.color
+    if hasattr(data, 'parent_id') and data.parent_id is not None:
+        db_obj.parent_id = data.parent_id
+        
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
 
 @router.delete("/{category_id}")
 def delete_category(category_id: UUID, db: Session = Depends(get_db_session)):

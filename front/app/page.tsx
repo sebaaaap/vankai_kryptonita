@@ -187,7 +187,8 @@ export default function AppPage() {
         stock: toNum((p as any).total_stock || (p as any).stock_quantity || 0),
         tax: 19,
         color: categoryColor,
-        unit: p.uom || "un"
+        unit: p.uom || "un",
+        productType: p.product_type || "STORABLE"
       }
     })
   }, [apiProducts, mappedCategories])
@@ -230,7 +231,7 @@ export default function AppPage() {
     (product: Product) => {
       console.log("handleAddProduct: Intentando agregar producto", product.name, "Stock:", product.stock);
       // Si es un servicio, no validamos stock
-      const isService = product.categoryId === "servicios" || String(product.categoryId).toLowerCase().includes("serv")
+      const isService = product.productType === "SERVICE" || product.categoryId === "servicios" || String(product.categoryId).toLowerCase().includes("serv")
 
       let targetId = ""
       let stockError = false
@@ -367,7 +368,7 @@ export default function AppPage() {
 
             const l = { ...ln }
             if (numpadMode === "quantity") {
-              const isService = l.product.categoryId === "servicios" || String(l.product.categoryId).toLowerCase().includes("serv")
+              const isService = l.product.productType === "SERVICE" || l.product.categoryId === "servicios" || String(l.product.categoryId).toLowerCase().includes("serv")
               if (!isService) {
                 // Calcular stock máximo disponible para este producto
                 const productMain = mappedProducts.find(p => String(p.id) === String(l.product.id))
@@ -492,7 +493,8 @@ export default function AppPage() {
                 tax: 19,
                 color: "bg-card border-border",
                 unit: apiProd?.uom || "un",
-                barcode: apiProd?.barcode || ""
+                barcode: apiProd?.barcode || "",
+                productType: apiProd?.product_type || "STORABLE"
               }
               return {
                 id: `hydrated-${item.id}`,
@@ -556,7 +558,7 @@ export default function AppPage() {
         if (!line) return prev
 
         productName = line.product.name
-        const isService = line.product.categoryId === "servicios" || String(line.product.categoryId).toLowerCase().includes("serv")
+        const isService = line.product.productType === "SERVICE" || line.product.categoryId === "servicios" || String(line.product.categoryId).toLowerCase().includes("serv")
 
         // Si estamos incrementando, validamos stock
         if (delta > 0 && !isService) {
@@ -837,8 +839,10 @@ export default function AppPage() {
       }
       setPaidOrders(prev => [creditNoteOrder, ...prev])
       setShowRefund(false)
-    } catch (error) {
-      toast.error("Error al procesar el reembolso")
+    } catch (error: any) {
+      console.error("Error al procesar el reembolso:", error)
+      const detail = error?.response?.data?.detail
+      toast.error(detail ? `Error: ${detail}` : "Error al procesar el reembolso")
     }
   }
 

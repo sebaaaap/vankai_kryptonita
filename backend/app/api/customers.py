@@ -165,7 +165,8 @@ def get_customer_history(customer_id: UUID, db: Session = Depends(get_db_session
     # Get Work Orders for this customer
     work_orders = db.query(WorkOrder).options(
         joinedload(WorkOrder.vehicle),
-        joinedload(WorkOrder.items).joinedload(WorkOrderItem.product)
+        joinedload(WorkOrder.items).joinedload(WorkOrderItem.product),
+        joinedload(WorkOrder.tickets)
     ).filter(
         WorkOrder.customer_id == customer_id
     ).order_by(WorkOrder.created_at.desc()).all()
@@ -189,6 +190,15 @@ def get_customer_history(customer_id: UUID, db: Session = Depends(get_db_session
                     "done": item.done,
                     "is_paid": item.is_paid
                 } for item in wo.items
+            ],
+            "tickets": [
+                {
+                    "id": t.id,
+                    "ticket_number": t.ticket_number,
+                    "date": t.date_created,
+                    "amount": float(t.total_amount),
+                    "payment_method": t.payment_method
+                } for t in wo.tickets if t.ticket_type == "OT_PAYMENT" and t.state in [SaleState.PAID, SaleState.VALIDATED] and not t.is_refunded
             ]
         })
 

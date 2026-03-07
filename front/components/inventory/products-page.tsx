@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Search, Plus, Edit, Trash2, Package, MapPin, ChevronDown } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Search, Plus, Edit, Trash2, Package, MapPin, ChevronDown, Upload, Loader2 } from "lucide-react";
 import { ProductModal } from "@/components/shared/product-modal";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +54,8 @@ export function ProductsPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isImporting, setIsImporting] = useState(false);
 
     const [formData, setFormData] = useState({
         name: "",
@@ -192,6 +194,34 @@ export function ProductsPage() {
         }
     };
 
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsImporting(true);
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            await api.post("/products/import", formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+            });
+            alert("Productos importados correctamente");
+            fetchProducts();
+            fetchCategories();
+            fetchLocations();
+        } catch (error: any) {
+            alert("Error: " + (error.response?.data?.detail || "Error en la importación"));
+        } finally {
+            setIsImporting(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+    };
+
     const filteredProducts = products.filter(
         (p) =>
             p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -233,6 +263,21 @@ export function ProductsPage() {
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
+                    <input
+                        type="file"
+                        accept=".xlsx, .xls"
+                        className="hidden"
+                        ref={fileInputRef}
+                        onChange={handleFileUpload}
+                    />
+                    <button
+                        onClick={handleImportClick}
+                        disabled={isImporting}
+                        className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-muted text-foreground hover:bg-muted/80 transition-colors border border-border disabled:opacity-50"
+                    >
+                        {isImporting ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                        <span className="hidden md:inline">{isImporting ? "Importando..." : "Importar"}</span>
+                    </button>
                     <button
                         onClick={openCreateModal}
                         className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
@@ -353,14 +398,18 @@ export function ProductsPage() {
                                     </td>
                                     <td className="px-5 py-4 text-center">
                                         <div className="flex flex-col items-center gap-1">
-                                            <span
-                                                className={`text-sm font-bold ${product.total_stock <= 5
-                                                    ? "text-red-600"
-                                                    : "text-emerald-600"
-                                                    }`}
-                                            >
-                                                {product.total_stock}
-                                            </span>
+                                            {product.product_type === "SERVICE" ? (
+                                                <span className="text-sm font-bold text-muted-foreground">-</span>
+                                            ) : (
+                                                <span
+                                                    className={`text-sm font-bold ${product.total_stock <= 5
+                                                        ? "text-red-600"
+                                                        : "text-emerald-600"
+                                                        }`}
+                                                >
+                                                    {product.total_stock}
+                                                </span>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="px-5 py-4 text-right font-bold text-foreground">

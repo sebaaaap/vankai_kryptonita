@@ -153,7 +153,8 @@ export function ServiceEditor() {
                     quantity: i.quantity,
                     unit_price: i.price
                 })),
-                service_info: stickerData
+                service_info: stickerData,
+                is_ot: mode === 'ot'
             }
 
             toast.info("Guardando documento...")

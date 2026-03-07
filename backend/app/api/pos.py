@@ -207,6 +207,8 @@ def create_refund(refund: RefundCreate, db: Session = Depends(get_db_session)):
             "original_ticket": original_ticket
         })
         return jsonable_encoder(response_data)
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"ERROR en create_refund: {e}")
         import traceback

@@ -261,10 +261,11 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
 
     const markOtAsReady = async () => {
         if (!selectedDoc) return;
+        if (!confirm("Se procederá a cerrar la OT y descontar los productos restantes del inventario. ¿Confirmar?")) return;
         try {
-            await apiService.updateOtState(selectedDoc.id, "READY");
+            await apiService.updateOtState(selectedDoc.id, "COMPLETED");
             setItemsList(prev => prev.map(item => item.id === selectedDoc.id ? { ...item, state: "READY" } : item));
-            toast.success(`Orden marcada como LISTA para entrega`);
+            toast.success(`Orden de trabajo finalizada`);
             setSelectedDoc(null); // Cerrar modal
         } catch {
             toast.error("Error al actualizar estado de la OT");
@@ -781,8 +782,8 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
                                 {selectedDoc.items.map(item => (
                                     <div
                                         key={item.id}
-                                        onClick={() => selectedDoc.type === "ot" && !item.is_paid && toggleItemDone(item.id)}
-                                        className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${selectedDoc.type === "ot" && !item.is_paid ? 'cursor-pointer hover:bg-card/80' : ''} ${item.done ? 'bg-emerald-50/50 border-emerald-200' : 'bg-card border-border'} ${item.is_paid ? 'opacity-80' : ''}`}
+                                        onClick={() => selectedDoc.type === "ot" && toggleItemDone(item.id)}
+                                        className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${selectedDoc.type === "ot" ? 'cursor-pointer hover:bg-card/80' : ''} ${item.done ? 'bg-emerald-50/50 border-emerald-200' : 'bg-card border-border'} ${item.is_paid ? 'opacity-80' : ''}`}
                                     >
                                         <div className="flex items-center gap-4">
                                             {/* Checkbox solo visible en OTs */}
@@ -844,8 +845,9 @@ export function QuotesOtManager({ type }: { type: "quote" | "ot" }) {
                                         </Button>
                                         <Button
                                             onClick={markOtAsReady}
-                                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-12 px-6 rounded-xl shadow-lg shadow-emerald-200/50 disabled:opacity-50 disabled:grayscale transition-all"
-                                            disabled={!selectedDoc.items.every(i => i.done)}
+                                            disabled={!selectedDoc.items.every((i: any) => i.done)}
+                                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-12 px-6 rounded-xl shadow-lg shadow-emerald-200/50 transition-all disabled:opacity-40 disabled:grayscale disabled:cursor-not-allowed"
+                                            title={!selectedDoc.items.every((i: any) => i.done) ? "Marca todas las tareas como completadas para finalizar" : ""}
                                         >
                                             <CheckCircle className="mr-2 h-5 w-5" />
                                             Finalizar y Entregar

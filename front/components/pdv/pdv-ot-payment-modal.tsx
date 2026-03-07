@@ -49,7 +49,7 @@ export function PdvOtPaymentModal({ open, onClose, onConfirm, selectedCustomer }
     const loadActiveOts = async () => {
         setIsLoading(true)
         try {
-            const ots = await apiService.getActiveWorkOrders()
+            const ots = await apiService.getActiveWorkOrders(true)
             setActiveOts(ots)
 
             // Si hay un cliente seleccionado en PDV, mostramos sus OTs automáticamente
@@ -76,10 +76,8 @@ export function PdvOtPaymentModal({ open, onClose, onConfirm, selectedCustomer }
     const selectOt = (ot: any) => {
         setSelectedOt(ot)
         setSelectedItemIds([])
-        // Calcular saldo pendiente
-        const paid = ot.payments ? ot.payments.reduce((acc: number, p: any) => acc + Number(p.amount), 0) : 0
-        const total = Number(ot.total_amount)
-        const balance = total - paid
+        // Usar el saldo calculado por el servidor (evita datos cacheados)
+        const balance = Number(ot.pending_balance ?? (Number(ot.total_amount) - (ot.total_payments ? Number(ot.total_payments) : (ot.payments ? ot.payments.reduce((acc: number, p: any) => acc + Number(p.amount), 0) : 0))))
         setPayAmount(balance > 0 ? balance.toString() : "")
     }
 
@@ -144,11 +142,16 @@ export function PdvOtPaymentModal({ open, onClose, onConfirm, selectedCustomer }
         onConfirm(amount, paymentMethod, selectedOt.id, selectedItemIds)
     }
 
-    // Calcula datos del OT seleccionado para la interfaz
+    // Calcula datos del OT seleccionado — prioriza campos del servidor para evitar datos desactualizados
     const otPaidStatus = selectedOt ? (() => {
-        const paid = selectedOt.payments ? selectedOt.payments.reduce((acc: number, p: any) => acc + Number(p.amount), 0) : 0
         const total = Number(selectedOt.total_amount)
-        return { paid, total, balance: total - paid }
+        const paid = selectedOt.total_payments !== undefined
+            ? Number(selectedOt.total_payments)
+            : (selectedOt.payments ? selectedOt.payments.reduce((acc: number, p: any) => acc + Number(p.amount), 0) : 0)
+        const balance = selectedOt.pending_balance !== undefined
+            ? Number(selectedOt.pending_balance)
+            : Math.max(total - paid, 0)
+        return { paid, total, balance }
     })() : null
 
     return (

@@ -419,6 +419,17 @@ class WorkOrder(BaseModel):
         ]
         
     @property
+    def total_payments(self):
+        return sum(
+            t.total_amount for t in self.tickets
+            if t.state in (SaleState.PAID, SaleState.VALIDATED) and not t.is_refunded
+        )
+
+    @property
+    def pending_balance(self):
+        return max(self.total_amount - self.total_payments, 0)
+
+    @property
     def financial_progress(self):
         from decimal import Decimal
         total = self.total_amount
@@ -445,6 +456,7 @@ class WorkOrderItem(BaseModel):
     subtotal = Column(Numeric(12, 2), nullable=False)
     done = Column(Boolean, default=False, nullable=False)
     is_paid = Column(Boolean, default=False, nullable=False)
+    stock_consumed = Column(Boolean, default=False, nullable=False)
     
     work_order = relationship("WorkOrder", back_populates="items")
     product = relationship("Product")

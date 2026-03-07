@@ -10,6 +10,11 @@ class CategoryBase(BaseModel):
 class CategoryCreate(CategoryBase):
     pass
 
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    parent_id: Optional[UUID] = None
+
 class CategoryResponse(CategoryBase):
     id: UUID
     

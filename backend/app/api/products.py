@@ -26,6 +26,11 @@ class ProductCreate(BaseModel):
     product_type: str = "STORABLE"
     location_id: Optional[UUID] = None
 
+import pandas as pd
+import io
+import random
+from app.models.base import ProductCategory, InventoryMovement, InventoryMovementItem, MovementType, ProductType
+
 @router.post("/upload-image")
 def upload_product_image(
     file: UploadFile = File(...),
@@ -33,6 +38,130 @@ def upload_product_image(
 ):
     url = ImageService.save_image(file)
     return {"url": url}
+
+@router.post("/import")
+async def import_products(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db_session),
+    current_user = Depends(check_roles(["admin", "inventario"]))
+):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un Excel (.xlsx o .xls)")
+        
+    try:
+        content = await file.read()
+        df = pd.read_excel(io.BytesIO(content))
+        
+        # Normalizar columnas
+        df.columns = [str(c).strip().lower() for c in df.columns]
+        
+        required_cols = {"nombre", "codigo de barras", "precio venta", "costo", "stock inicial", "categoria"}
+        if not required_cols.issubset(set(df.columns)):
+            missing = required_cols - set(df.columns)
+            raise HTTPException(status_code=400, detail=f"Faltan columnas obligatorias: {missing}. Encontradas: {list(df.columns)}")
+            
+        movement = None
+        user_id = getattr(current_user, "id", None) or getattr(current_user, "username", "admin")
+        
+        for _, row in df.iterrows():
+            name = str(row["nombre"]).strip()
+            barcode = str(row["codigo de barras"]).strip()
+            if pd.isna(name) or pd.isna(barcode) or not name or not barcode:
+                continue
+                
+            price = float(row.get("precio venta") or 0)
+            cost = float(row.get("costo") or 0)
+            stock = float(row.get("stock inicial") or 0)
+            category_name = str(row.get("categoria", "")).strip()
+            pasillo_path = str(row.get("pasillo", "")).strip()
+            min_stock = float(row.get("stock minimo") or 5)
+            
+            internal_ref = str(row.get("referencia interna", "")).strip()
+            if pd.isna(internal_ref) or internal_ref.lower() == "nan" or not internal_ref:
+                internal_ref = None
+            
+            # Categoria
+            cat_obj = None
+            if category_name and category_name.lower() != "nan":
+                cat_obj = db.query(ProductCategory).filter(ProductCategory.name.ilike(category_name)).first()
+                if not cat_obj:
+                    # Generar color base pastel/agradable
+                    colors = ["#e11d48", "#2563eb", "#16a34a", "#ca8a04", "#9333ea", "#0891b2", "#ea580c"]
+                    cat_color = random.choice(colors)
+                    cat_obj = ProductCategory(name=category_name, color=cat_color)
+                    db.add(cat_obj)
+                    db.flush()
+            
+            # Tipo Producto
+            prod_type = ProductType.STORABLE
+            if category_name and ("servicio" in category_name.lower() or "mano de obra" in category_name.lower() or "repuesto" in category_name.lower()):
+                if "repuesto" not in category_name.lower(): # Repuestos si usan stock
+                    prod_type = ProductType.SERVICE
+                
+            # Ubicacion
+            loc_obj = None
+            if pasillo_path and pasillo_path.lower() != "nan":
+                loc_obj = db.query(StorageLocation).filter(StorageLocation.path == pasillo_path).first()
+                
+            product = db.query(Product).filter(Product.barcode == barcode).first()
+            is_new = False
+            
+            if not product:
+                product = Product(
+                    name=name,
+                    barcode=barcode,
+                    internal_reference=internal_ref,
+                    price=price,
+                    cost=cost,
+                    stock_quantity=0, # Empezamos en 0 para luego sumarle el movimiento
+                    min_stock=min_stock,
+                    product_type=prod_type,
+                    category_id=cat_obj.id if cat_obj else None,
+                    category=cat_obj.name if cat_obj else None,
+                    location_id=loc_obj.id if loc_obj else None
+                )
+                db.add(product)
+                db.flush()
+                is_new = True
+            else:
+                product.name = name
+                product.internal_reference = internal_ref
+                product.price = price
+                product.cost = cost
+                product.min_stock = min_stock
+                if cat_obj:
+                    product.category_id = cat_obj.id
+                    product.category = cat_obj.name
+                if loc_obj:
+                    product.location_id = loc_obj.id
+                product.product_type = prod_type
+                
+            # Movimiento Inicial Solo si es nuevo y tiene stock inicial
+            if prod_type != ProductType.SERVICE and stock > 0 and is_new:
+                if not movement:
+                    movement = InventoryMovement(
+                        type=MovementType.IN_ADJUSTMENT,
+                        reason="Importación masiva Excel inicial",
+                        user_id=str(user_id)
+                    )
+                    db.add(movement)
+                    db.flush()
+                    
+                mov_item = InventoryMovementItem(
+                    movement_id=movement.id,
+                    product_id=product.id,
+                    quantity=stock,
+                    stock_before=0,
+                    stock_after=stock
+                )
+                db.add(mov_item)
+                product.stock_quantity += stock
+                
+        db.commit()
+        return {"detail": "Importación completada correctamente"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error leyendo excel: {str(e)}")
 
 @router.post("/", response_model=ProductResponseWithLocation)
 def create_product(
@@ -77,7 +206,8 @@ from collections import defaultdict
 class ProductLocationDetail(BaseModel):
     id: UUID # ID del registro específico (para operaciones puntuales)
     location_id: UUID
-    location_path: str
+    location_path: Optional[str] = None
+    location_name: Optional[str] = None
     stock: float
 
 class ProductAggregatedResponse(BaseModel):
@@ -127,7 +257,8 @@ def list_products(
                 locs.append(ProductLocationDetail(
                     id=i.id,
                     location_id=i.location.id,
-                    location_path=i.location.path,
+                    location_path=i.location.path or i.location.name or "",
+                    location_name=i.location.name,
                     stock=i.stock_quantity
                 ))
         

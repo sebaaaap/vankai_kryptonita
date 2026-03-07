@@ -193,8 +193,8 @@ export const apiService = {
         return response.data;
     },
 
-    async getActiveWorkOrders(): Promise<any[]> {
-        const response = await api.get("/pos/active-orders");
+    async getActiveWorkOrders(posOnly?: boolean): Promise<any[]> {
+        const response = await api.get("/pos/active-orders", { params: { pos_only: posOnly } });
         return response.data;
     },
 

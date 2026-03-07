@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_
 from datetime import datetime
 from fastapi import HTTPException
@@ -10,7 +10,7 @@ from app.models.base import (
     Quote, QuoteItem, WorkOrder, WorkOrderItem, WorkOrderPayment,
     QuoteState, WorkOrderState, PaymentMethod, CashSession, Product,
     InventoryMovement, InventoryMovementItem, MovementType, StorageLocation,
-    Ticket, SaleItem, SaleState
+    Ticket, SaleItem, SaleState, ProductType
 )
 from app.schemas.quotes import QuoteCreate, QuoteUpdateState
 from app.schemas.work_orders import WorkOrderCreate, WorkOrderPaymentCreate
@@ -48,6 +48,12 @@ class QuoteWorkOrderService:
         quote.total = total
         db.commit()
         db.refresh(quote)
+
+        # Si el modo seleccionado era OT, aprobamos inmediatamente la cotización creada
+        if quote_data.is_ot:
+            QuoteWorkOrderService.approve_quote(db, quote.id)
+            db.refresh(quote)
+
         return quote
 
     @staticmethod
@@ -128,7 +134,11 @@ class QuoteWorkOrderService:
         if not original_product:
             raise HTTPException(status_code=404, detail=f"Producto {wo_item.product_id} no encontrado")
 
-        if original_product.product_type == "SERVICE":
+        # Servicios no descuentan stock
+        pt = original_product.product_type
+        is_service = (pt == ProductType.SERVICE) or (hasattr(pt, 'value') and pt.value == "SERVICE") or (pt == "SERVICE")
+        if is_service:
+            wo_item.stock_consumed = True  # Mark as consumed (no stock to deduct for services)
             return # Services don't deduct stock
 
         candidates = db.query(Product).outerjoin(Product.location).filter(
@@ -168,12 +178,33 @@ class QuoteWorkOrderService:
 
             qty_remaining -= take
 
+        wo_item.stock_consumed = True  # Mark this item's stock as consumed
+
 
     @staticmethod
-    def get_active_work_orders(db: Session):
-        return db.query(WorkOrder).filter(
-            WorkOrder.state.in_([WorkOrderState.OPEN, WorkOrderState.IN_PROGRESS, WorkOrderState.READY])
+    def get_active_work_orders(db: Session, pos_only: bool = False):
+        orders = db.query(WorkOrder).options(
+            joinedload(WorkOrder.items),
+            joinedload(WorkOrder.tickets)
+        ).filter(
+            WorkOrder.state.in_([WorkOrderState.OPEN, WorkOrderState.IN_PROGRESS, WorkOrderState.READY, WorkOrderState.COMPLETED])
         ).all()
+        
+        if not pos_only:
+            return orders
+
+        active = []
+        for wo in orders:
+            total_items = sum(item.subtotal for item in wo.items)
+            total_payments = sum(
+                t.total_amount for t in wo.tickets
+                if t.state in (SaleState.PAID, SaleState.VALIDATED) and not t.is_refunded
+            )
+            balance = total_items - total_payments
+            if balance > Decimal('1'):  # tolerancia de $1 para redondeos
+                active.append(wo)
+                
+        return active
 
     @staticmethod
     def add_payment(db: Session, wo_id: UUID, payment_data: WorkOrderPaymentCreate, session_id: UUID) -> tuple[Ticket, Decimal]:
@@ -241,7 +272,8 @@ class QuoteWorkOrderService:
             pago = Payment(
                 ticket_id=ticket.id,
                 payment_method=pm_enum,
-                amount=payment_data.amount
+                amount=payment_data.amount,
+                reference=f"Abono/Pago OT #{str(wo.id).split('-')[0]}"
             )
             db.add(pago)
 
@@ -266,9 +298,22 @@ class QuoteWorkOrderService:
                     )
                     db.add(sale_item)
             else:
-                # If it's a generic payment (lump sum), we could create a dummy item or just leave it.
-                # But usually, if they selection items in the UI, we'll have item_ids.
-                pass
+                # Pago global (sin seleccionar ítems): crear SaleItems para TODOS los ítems de la OT
+                from app.models.base import SaleItem as SI
+                total_ot = sum(item.subtotal for item in wo.items) or Decimal('1')
+                for woi in wo.items:
+                    # Marcar como pagado si el pago cubre el total de la OT
+                    if payment_data.amount >= (total_ot - Decimal('1')):  # tolerancia de $1 por redondeo
+                        woi.is_paid = True
+                    sale_item = SI(
+                        ticket_id=ticket.id,
+                        product_id=woi.product_id,
+                        quantity=woi.quantity,
+                        unit_price=woi.unit_price,
+                        subtotal=woi.subtotal,
+                        discount_percent=Decimal('0')
+                    )
+                    db.add(sale_item)
 
             # auto-complete OT if all items are paid
             db.flush()

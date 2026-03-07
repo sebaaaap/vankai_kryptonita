@@ -66,6 +66,8 @@ class WorkOrderResponse(BaseModel):
     customer: Optional[CustomerResponse] = None
     vehicle: Optional[VehicleResponse] = None
     total_amount: Optional[Decimal] = None 
+    total_payments: Optional[Decimal] = None
+    pending_balance: Optional[Decimal] = None
     financial_progress: Optional[Decimal] = None
     operational_progress: Optional[Decimal] = None
     
