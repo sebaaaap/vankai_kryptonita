@@ -25,7 +25,11 @@ services:
       - db
 
   front:
-    build: ./front
+    build:
+      context: ./front
+      args:
+        # Esta variable se inyecta en tiempo de build para que Next.js la compile dentro del JS
+        NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
     container_name: pos_front_local
     restart: always
     ports:

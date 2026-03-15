@@ -13,6 +13,11 @@ RUN npm install --legacy-peer-deps
 # Copiar el resto del código
 COPY . .
 
+# Recibir variable de entorno de build (pasada desde docker-compose)
+# NEXT_PUBLIC_* se compilan dentro del bundle, deben existir al momento del build
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Construir el sitio estático (Next.js con output: "export")
 RUN npm run build
 
