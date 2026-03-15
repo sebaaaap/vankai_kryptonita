@@ -1,43 +1,62 @@
 @echo off
+setlocal enabledelayedexpansion
+
 echo ==============================================================
 echo        INICIANDO EL SISTEMA DE PUNTO DE VENTA
 echo ==============================================================
 echo.
 
+:: --- IMPORTANTE: Aseguramos que el script corra en su propia carpeta ---
+cd /d "%~dp0"
+
 :: 1. Intentamos actualizar el codigo desde GitHub sin preguntar
 echo [1/3] Buscando actualizaciones en la nube (Git Pull)...
 git pull origin main 
 if %errorlevel% neq 0 (
-    echo [Aviso] No se pudo actualizar el codigo (o no hay internet), iniciando con la version actual.
+    echo [Aviso] No se pudo conectar con el servidor de actualizaciones.
+    echo         Iniciando con la version guardada localmente...
 ) else (
-    echo [Aviso] Actualizaciones descargadas correctamente.
+    echo [OK] Actualizaciones descargadas con exito.
 )
 echo.
 
-:: 2. Encendemos el sistema usando Docker, reconstruyendolo si hubieron cambios
+:: 2. Encendemos el sistema usando Docker
 echo [2/3] Levantando Base de Datos, Servidor y Sitio Web...
-echo (Este paso puede tardar un poco si hay una gran actualizacion)
+echo      (La primera vez esto tardara varios minutos, sea paciente)
+echo.
+
 docker-compose up -d --build
+
 if %errorlevel% neq 0 (
-    echo [Error] Docker no se pudo iniciar. Asegurese de tener Docker Desktop abierto.
+    echo.
+    echo ##############################################################
+    echo [ERROR] Docker no pudo iniciar correctamente.
+    echo.
+    echo POSIBLES SOLUCIONES:
+    echo 1. Asegurese de que "Docker Desktop" este ABIERTO (icono de la ballena).
+    echo 2. Verifique que no haya otro programa usando los puertos 3000 o 8000.
+    echo 3. Reinicie Docker Desktop e intente de nuevo.
+    echo ##############################################################
+    echo.
     pause
     exit /b 1
 )
-echo.
 
 :: 3. Esperar a que el contenedor inicie y abrir Google Chrome
-echo [3/3] Abriendo el navegador...
-:: Le damos unos 5 segundos al servidor para estar 100% activo
+echo.
+echo [3/3] Abriendo el sistema en su navegador...
+:: Damos margen para que los servicios esten listos
 timeout /t 5 /nobreak > NUL
 
-:: Abre la url en el navegador
+:: Abre la url en el navegador predeterminado
 start http://localhost:3000
 
 echo.
 echo ==============================================================
-echo   El sistema ya esta corriendo en http://localhost:3000
-echo   Puede cerrar esta ventana negra.
+echo   SISTEMA ACTIVO EN: http://localhost:3000
+echo.
+echo   MANTENGA ESTA VENTANA ABIERTA MIENTRAS USE EL PROGRAMA.
+echo   (Se cerrara sola en unos segundos)
 echo ==============================================================
-:: Espera un momento antes de cerrarse
-timeout /t 5 /nobreak > NUL
+timeout /t 10 /nobreak > NUL
 exit
