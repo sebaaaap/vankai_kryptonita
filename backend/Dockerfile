@@ -26,7 +26,6 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY ./app ./app
 COPY ./alembic ./alembic
 COPY ./alembic.ini .
-COPY ./run.py .
 
 # Variables de entorno por defecto (serán sobrescritas por docker-compose)
 ENV DEPLOYMENT_MODE="SERVER"
