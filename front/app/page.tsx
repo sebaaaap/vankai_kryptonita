@@ -530,6 +530,8 @@ export default function AppPage() {
               amountPaid: toNum(sale.total_amount),
               returnToStock: sale.return_to_stock,
               originalTicketId: sale.original_ticket_id ? String(sale.original_ticket_id) : undefined,
+              documentType: sale.document_type || "boleta",
+              comment: sale.comment || "",
             } as Order
           })
 
@@ -635,7 +637,7 @@ export default function AppPage() {
 
   // Confirm payment
   const handleConfirmPayment = useCallback(
-    async (method: PaymentMethod, amountPaid: number) => {
+    async (method: PaymentMethod, amountPaid: number, documentType: string, comment: string) => {
       if (!activeSession) {
         toast.error("No hay una sesión de caja activa.")
         return
@@ -667,7 +669,9 @@ export default function AppPage() {
                 ApiPaymentMethod.TRANSFER,
           amount: saleTotal  // ← monto real de la venta, NO el que pagó el cliente
         }],
-        customer_id: selectedCustomer ? selectedCustomer.id : null
+        customer_id: selectedCustomer ? selectedCustomer.id : null,
+        document_type: documentType,
+        comment: comment
       }
 
       try {
@@ -692,6 +696,8 @@ export default function AppPage() {
           paymentMethod: method,
           amountPaid,   // guardamos lo que pagó el cliente para calcular vuelto en historial
           customer: selectedCustomer,
+          documentType,
+          comment,
         }
 
         setPaidOrders((prev) => [paidOrder, ...prev])
@@ -944,10 +950,10 @@ export default function AppPage() {
             onCustomerCreated={() => mutate("/customers/")}
           />
 
-          <div className="flex flex-1 overflow-hidden">
+          <div className="flex flex-1 min-h-0 overflow-hidden">
             <div className="flex flex-1 flex-col overflow-hidden">
               <PdvCategories categories={mappedCategories} selectedCategoryId={selectedCategoryId} onSelectCategory={setSelectedCategoryId} />
-              <div className="flex-1 overflow-hidden p-4 pt-0">
+              <div className="flex-1 min-h-0 overflow-hidden p-4 pt-0 flex flex-col">
                 <PdvProductGrid
                   products={filteredProducts}
                   selectedCategoryId={selectedCategoryId}

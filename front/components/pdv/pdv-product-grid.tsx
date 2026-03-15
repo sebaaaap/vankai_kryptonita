@@ -30,7 +30,7 @@ export function PdvProductGrid({
   })
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
       {/* Search Bar */}
       <div className="px-4 pb-3">
         <div className="relative">
@@ -46,7 +46,7 @@ export function PdvProductGrid({
       </div>
 
       {/* Product Grid */}
-      <ScrollArea className="flex-1 px-4">
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-20">
         {filteredProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <Package className="mb-3 h-12 w-12 opacity-30" />
@@ -54,7 +54,7 @@ export function PdvProductGrid({
             <p className="text-xs">Intenta con otra busqueda o categoria</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 pb-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
             {filteredProducts.map((product) => {
               const isService = product.productType === "SERVICE" || product.categoryId === "servicios" || String(product.categoryId).toLowerCase().includes("serv")
               return (
@@ -119,7 +119,7 @@ export function PdvProductGrid({
             })}
           </div>
         )}
-      </ScrollArea >
+      </div>
     </div >
   )
 }

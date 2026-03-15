@@ -326,12 +326,14 @@ class QuoteWorkOrderService:
             # Update session totals
             if pm_enum == PaymentMethod.CASH:
                 cash_session.total_sales_cash += payment_data.amount
+                cash_session.expected_balance = cash_session.opening_balance + cash_session.total_sales_cash
             elif pm_enum == PaymentMethod.CARD:
                 cash_session.total_sales_card += payment_data.amount
             elif pm_enum == PaymentMethod.TRANSFER:
                 cash_session.total_sales_transfer += payment_data.amount
             elif pm_enum == PaymentMethod.MIXED:
                 cash_session.total_sales_cash += payment_data.amount
+                cash_session.expected_balance = cash_session.opening_balance + cash_session.total_sales_cash
                 
             # If paid off completely, finish WO if operationally done
             if new_balance == Decimal('0'):

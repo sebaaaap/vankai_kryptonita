@@ -62,7 +62,7 @@ export function Sidebar() {
                     <span className="h-6 w-6 rounded-lg bg-primary/20 text-primary flex items-center justify-center">
                         <Monitor size={14} />
                     </span>
-                    <span>{isAdmin ? "Panel de Control" : "Punto de Venta"}</span>
+                    <span>{isAdmin ? "Backend" : "Punto de Venta"}</span>
                 </Link>
             </div>
 

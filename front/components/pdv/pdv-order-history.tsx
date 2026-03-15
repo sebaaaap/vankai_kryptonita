@@ -25,6 +25,8 @@ import {
   ArrowLeftRight,
   User,
   Car,
+  FileText,
+  MessageSquare
 } from "lucide-react"
 
 interface PdvOrderHistoryProps {
@@ -245,6 +247,26 @@ export function PdvOrderHistory({
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <Car className="h-3.5 w-3.5" />
                           <span>{selectedOrder.customer.vehicle}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Document & Comment info */}
+                  {(selectedOrder.documentType || selectedOrder.comment) && (
+                    <div className="mt-2 flex flex-col gap-2 rounded-lg bg-muted/30 px-3 py-2 border border-border/50">
+                      {selectedOrder.documentType && (
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          {selectedOrder.documentType === 'factura' ? <FileText className="h-3.5 w-3.5 text-primary" /> : <Receipt className="h-3.5 w-3.5" />}
+                          <span className="font-medium text-foreground capitalize">
+                            {selectedOrder.documentType}
+                          </span>
+                        </div>
+                      )}
+                      {selectedOrder.comment && (
+                        <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                          <MessageSquare className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                          <span className="italic">{selectedOrder.comment}</span>
                         </div>
                       )}
                     </div>

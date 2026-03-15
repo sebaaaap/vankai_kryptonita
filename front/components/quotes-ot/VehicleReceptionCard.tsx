@@ -1,12 +1,19 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
-import { CheckCircle, XCircle, Minus, Save, FileDown, RotateCcw, ClipboardList } from "lucide-react";
+import React, { useState, useCallback, useEffect } from "react";
+import {
+    CheckCircle, XCircle, Minus, Save, FileDown,
+    RotateCcw, ClipboardList, User, Car, Calendar,
+    Navigation, AlertCircle, ArrowRightLeft, Check,
+    Truck, LogIn, LogOut, MapPin, Fuel
+} from "lucide-react";
 import { VehicleDiagram, DamageMarker } from "./VehicleDiagram";
 import { FuelGauge } from "./FuelGauge";
 import { DamageModal } from "./DamageModal";
 import { toast } from "sonner";
 import { apiService } from "@/services/apiService";
+import { useAuth } from "@/contexts/AuthContext";
+import { ReceptionDocumentTemplate } from "./ReceptionDocumentTemplate";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -100,55 +107,53 @@ const INITIAL_CHECKLIST: ChecklistGroup[] = [
             { id: "botiquin", label: "Botiquín", status: null },
         ],
     },
-    {
-        title: "Otros",
-        items: [
-            { id: "soat", label: "SOAT", status: null },
-            { id: "inspeccion_tecnica", label: "Inspección técnica", status: null },
-        ],
-    },
 ];
 
-// ─── CheckButton Component ────────────────────────────────────────────────────
+// ─── Sub-Components ──────────────────────────────────────────────────────────
 
-function CheckButton({
-    status,
-    onSetStatus,
-}: {
-    status: CheckStatus;
-    onSetStatus: (s: CheckStatus) => void;
-}) {
+function SectionHeader({ icon: Icon, title, subtitle }: { icon: any; title: string; subtitle?: string }) {
     return (
-        <div className="flex gap-1.5">
+        <div className="flex items-center gap-3 mb-6 p-1">
+            <div className="p-2.5 bg-primary/10 rounded-xl text-primary border border-primary/20 shadow-sm">
+                <Icon size={20} strokeWidth={2.5} />
+            </div>
+            <div>
+                <h3 className="text-sm font-black text-foreground uppercase tracking-wider">{title}</h3>
+                {subtitle && <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{subtitle}</p>}
+            </div>
+        </div>
+    );
+}
+
+function StatusButtons({ status, onSetStatus }: { status: CheckStatus; onSetStatus: (s: CheckStatus) => void }) {
+    return (
+        <div className="flex items-center gap-1.5 p-1.5 bg-muted/30 rounded-2xl border border-transparent hover:border-border/60 transition-all">
             <button
                 onClick={() => onSetStatus(status === "good" ? null : "good")}
-                title="Bueno"
-                className={`h-9 w-9 rounded-lg flex items-center justify-center transition-all font-bold text-sm border-2 ${status === "good"
-                    ? "bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-200"
-                    : "bg-card border-border text-muted-foreground hover:border-emerald-300 hover:text-emerald-500"
+                className={`h-9 w-9 rounded-lg flex items-center justify-center transition-all shadow-sm ${status === "good"
+                    ? "bg-green-500 text-white translate-y-[-1px] shadow-lg shadow-green-500/20"
+                    : "bg-card text-muted-foreground hover:bg-green-50 hover:text-green-600"
                     }`}
             >
-                <CheckCircle size={16} />
+                <CheckCircle size={18} />
             </button>
             <button
                 onClick={() => onSetStatus(status === "bad" ? null : "bad")}
-                title="Malo"
-                className={`h-9 w-9 rounded-lg flex items-center justify-center transition-all font-bold text-sm border-2 ${status === "bad"
-                    ? "bg-red-500 border-red-500 text-white shadow-md shadow-red-200"
-                    : "bg-card border-border text-muted-foreground hover:border-red-300 hover:text-red-500"
+                className={`h-9 w-9 rounded-lg flex items-center justify-center transition-all shadow-sm ${status === "bad"
+                    ? "bg-red-500 text-white translate-y-[-1px] shadow-lg shadow-red-500/20"
+                    : "bg-card text-muted-foreground hover:bg-red-50 hover:text-red-600"
                     }`}
             >
-                <XCircle size={16} />
+                <XCircle size={18} />
             </button>
             <button
                 onClick={() => onSetStatus(status === "na" ? null : "na")}
-                title="No aplica"
-                className={`h-9 w-9 rounded-lg flex items-center justify-center transition-all font-bold text-sm border-2 ${status === "na"
-                    ? "bg-slate-400 border-slate-400 text-white shadow-md"
-                    : "bg-card border-border text-muted-foreground hover:border-slate-400 hover:text-slate-500"
+                className={`h-9 w-9 rounded-lg flex items-center justify-center transition-all shadow-sm ${status === "na"
+                    ? "bg-slate-400 text-white translate-y-[-1px] shadow-lg shadow-slate-500/20"
+                    : "bg-card text-muted-foreground hover:bg-slate-100 hover:text-slate-600"
                     }`}
             >
-                <Minus size={16} />
+                <Minus size={18} />
             </button>
         </div>
     );
@@ -163,11 +168,14 @@ interface VehicleReceptionCardProps {
 }
 
 export function VehicleReceptionCard({ otId, initialData, onSave }: VehicleReceptionCardProps) {
-    const [form, setForm] = useState<ReceptionFormData>({
+    const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState<"reception" | "dispatch">("reception");
+
+    const [form, setForm] = useState<ReceptionFormData>(() => ({
         marca: "",
         color: "",
         modelo: "",
-        tipo: "",
+        tipo: "Sedán",
         placa: "",
         anio: "",
         km_entrega: "",
@@ -180,18 +188,30 @@ export function VehicleReceptionCard({ otId, initialData, onSave }: VehicleRecep
         licencia_recibe: "",
         markers: [],
         checklist: INITIAL_CHECKLIST,
-        fuel_level: 0,
+        fuel_level: 50,
         observaciones: "",
         ...initialData,
-    });
+    }));
 
     const [saving, setSaving] = useState(false);
     const [exportingPdf, setExportingPdf] = useState(false);
 
+    // Auto-fill user detection
+    useEffect(() => {
+        if (user) {
+            const currentName = user.full_name || user.username;
+            if (activeTab === "reception" && !form.funcionario_recibe) {
+                setForm(prev => ({ ...prev, funcionario_recibe: currentName }));
+            } else if (activeTab === "dispatch" && !form.funcionario_entrega) {
+                setForm(prev => ({ ...prev, funcionario_entrega: currentName }));
+            }
+        }
+    }, [user, activeTab, form.funcionario_recibe, form.funcionario_entrega]);
+
     // Damage modal state
     const [damageModal, setDamageModal] = useState<{
         marker: DamageMarker | null;
-        tempCoords: { x: number; y: number; view: "top" | "front" | "side" } | null;
+        tempCoords: { x: number; y: number; view: "top" | "front" | "rear" | "left" | "right"; detectedZone?: string } | null;
     } | null>(null);
 
     // ── Field updater ────────────────────────────────────
@@ -220,8 +240,8 @@ export function VehicleReceptionCard({ otId, initialData, onSave }: VehicleRecep
 
     // ── Damage markers ───────────────────────────────────
     const handleAddMarker = useCallback(
-        (coords: { x: number; y: number }, view: "top" | "front" | "side") => {
-            setDamageModal({ marker: null, tempCoords: { ...coords, view } });
+        (coords: { x: number; y: number }, view: "top" | "front" | "rear" | "left" | "right", detectedZone?: string) => {
+            setDamageModal({ marker: null, tempCoords: { ...coords, view, detectedZone } });
         },
         []
     );
@@ -230,51 +250,40 @@ export function VehicleReceptionCard({ otId, initialData, onSave }: VehicleRecep
         setDamageModal({ marker, tempCoords: null });
     }, []);
 
-    const handleSaveDamage = useCallback(
-        (data: { note: string; photo_url?: string; zone: string }, markerId?: string) => {
-            setForm((prev) => {
-                if (markerId) {
-                    // Update existing
-                    return {
-                        ...prev,
-                        markers: prev.markers.map((m) =>
-                            m.id === markerId ? { ...m, ...data } : m
-                        ),
-                    };
-                } else {
-                    // New marker
-                    const coords = damageModal?.tempCoords || { x: 50, y: 50 };
-                    const view = damageModal?.tempCoords?.view || "top";
-                    const newMarker: DamageMarker = {
-                        id: `dmg_${Date.now()}`,
-                        zone: data.zone,
-                        note: data.note,
-                        photo_url: data.photo_url,
-                        coords: { x: coords.x, y: coords.y },
-                        view,
-                    };
-                    return { ...prev, markers: [...prev.markers, newMarker] };
-                }
-            });
-        },
-        [damageModal]
-    );
+    const handleSaveDamage = (data: { note: string; photo_url?: string; zone: string }, markerId?: string) => {
+        if (markerId) {
+            setForm((prev) => ({
+                ...prev,
+                markers: prev.markers.map((m) => (m.id === markerId ? { ...m, ...data } : m)),
+            }));
+        } else if (damageModal?.tempCoords) {
+            const newMarker: DamageMarker = {
+                id: Math.random().toString(36).substr(2, 9),
+                ...data,
+                coords: { x: damageModal.tempCoords.x, y: damageModal.tempCoords.y },
+                view: damageModal.tempCoords.view,
+                type: activeTab, // Record whether it was found during reception or dispatch
+            };
+            setForm((prev) => ({ ...prev, markers: [...prev.markers, newMarker] }));
+        }
+        setDamageModal(null);
+    };
 
-    const handleDeleteMarker = useCallback((markerId: string) => {
+    const handleDeleteDamage = (markerId: string) => {
         setForm((prev) => ({
             ...prev,
             markers: prev.markers.filter((m) => m.id !== markerId),
         }));
         toast.success("Marcador eliminado");
-    }, []);
+    };
 
-    // ── Save ─────────────────────────────────────────────
+    // ── Persistence ──────────────────────────────────────
     const handleSave = async () => {
         setSaving(true);
         const savePromise = onSave ? onSave(form) : apiService.saveReception(otId, form);
 
         toast.promise(savePromise, {
-            loading: 'Guardando ficha de recepción...',
+            loading: 'Guardando ficha técnica...',
             success: 'Ficha guardada correctamente',
             error: (err) => `Error al guardar: ${err.message || 'Intente nuevamente'}`
         });
@@ -290,19 +299,44 @@ export function VehicleReceptionCard({ otId, initialData, onSave }: VehicleRecep
 
     const handleExportPDF = async () => {
         setExportingPdf(true);
+        // Uses frontend print logic similar to quote printing.
         try {
-            const blob = await apiService.exportReceptionPdf(otId, form);
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `ficha_recepcion_OT${otId}.pdf`;
-            a.click();
-            URL.revokeObjectURL(url);
-            toast.success("PDF generado correctamente");
+            const printContent = document.getElementById("reception-document-to-print");
+            if (!printContent) throw new Error("Plantilla de impresión no encontrada");
+
+            const windowUrl = 'about:blank';
+            const uniqueName = new Date().getTime();
+            const windowName = 'Print' + uniqueName;
+            const printWindow = window.open(windowUrl, windowName, 'left=0,top=0,width=800,height=900,toolbar=0,scrollbars=0,status=0');
+
+            if (printWindow) {
+                printWindow.document.write(`
+                    <html>
+                        <head>
+                            <title>Ficha_OT_${otId}.pdf</title>
+                            <script src="https://cdn.tailwindcss.com"></script>
+                            <style>
+                                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+                                body { font-family: 'Inter', sans-serif; -webkit-print-color-adjust: exact; }
+                                @page { margin: 1cm; size: auto; }
+                            </style>
+                        </head>
+                        <body>
+                            ${printContent.innerHTML}
+                            <script>
+                                setTimeout(() => {
+                                    window.print();
+                                    window.close();
+                                }, 1000);
+                            </script>
+                        </body>
+                    </html>
+                `);
+                printWindow.document.close();
+            }
         } catch (error) {
-            console.error("PDF error:", error);
-            toast.error("Error al generar PDF");
-            window.print();
+            console.error("PDF export error:", error);
+            toast.error("Error al generar PDF localmente");
         } finally {
             setExportingPdf(false);
         }
@@ -311,310 +345,268 @@ export function VehicleReceptionCard({ otId, initialData, onSave }: VehicleRecep
     // ── Stats ────────────────────────────────────────────
     const totalItems = form.checklist.flatMap((g) => g.items).length;
     const checkedItems = form.checklist.flatMap((g) => g.items).filter((i) => i.status !== null).length;
-    const goodCount = form.checklist.flatMap((g) => g.items).filter((i) => i.status === "good").length;
-    const badCount = form.checklist.flatMap((g) => g.items).filter((i) => i.status === "bad").length;
     const progress = Math.round((checkedItems / totalItems) * 100);
 
     return (
-        <div className="space-y-6 pb-8">
-            {/* ── Header bar ── */}
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-card border border-border rounded-2xl p-5 shadow-sm">
-                <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-primary/10 rounded-xl">
-                        <ClipboardList size={22} className="text-primary" />
+        <div className="space-y-8 pb-12">
+            {/* ── Top Dynamic Header ── */}
+            <div className="relative overflow-hidden bg-card border border-border rounded-[2.5rem] shadow-xl p-8">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-32 -mt-32 blur-3xl" />
+
+                <div className="relative flex flex-col lg:flex-row items-center justify-between gap-8">
+                    <div className="flex items-center gap-5">
+                        <div className="p-4 bg-primary/10 rounded-2xl border border-primary/20 shadow-inner">
+                            <ClipboardList size={32} className="text-primary" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="px-2.5 py-0.5 rounded-full bg-primary/20 text-[10px] font-black text-primary uppercase tracking-widest border border-primary/30">ORDEN DE TRABAJO {otId}</span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-border" />
+                                <span className="text-[10px] font-bold text-muted-foreground uppercase">{activeTab === "reception" ? "Entrada" : "Salida"}</span>
+                            </div>
+                            <h2 className="text-2xl font-black text-foreground tracking-tight">Registro Técnico del Vehículo</h2>
+                            <p className="text-xs text-muted-foreground font-medium">Inspección de calidad y estado para taller.</p>
+                        </div>
                     </div>
-                    <div>
-                        <h2 className="font-black text-foreground text-base">Ficha de Recepción del Vehículo</h2>
-                        <p className="text-xs text-muted-foreground">OT-{otId} — Registro de Entrega y Estado</p>
+
+                    {/* Mode Toggle */}
+                    <div className="flex bg-muted/50 p-1.5 rounded-[1.5rem] border border-border/60 shadow-inner">
+                        <button
+                            onClick={() => setActiveTab("reception")}
+                            className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-500 ${activeTab === "reception"
+                                ? "bg-white text-primary shadow-xl shadow-black/5 border border-border/20"
+                                : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                            <LogIn size={15} />
+                            Recepción
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("dispatch")}
+                            className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-500 ${activeTab === "dispatch"
+                                ? "bg-white text-secondary shadow-xl shadow-black/5 border border-border/20"
+                                : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                            <LogOut size={15} />
+                            Despacho
+                        </button>
+                    </div>
+
+                    <div className="flex flex-wrap justify-center gap-3">
+                        <button
+                            onClick={() => setForm({ ...form, checklist: INITIAL_CHECKLIST, markers: [] })}
+                            className="group flex items-center gap-2 px-5 py-3 text-[11px] font-black text-muted-foreground bg-muted border border-border rounded-2xl hover:bg-white hover:text-red-500 transition-all duration-300 uppercase tracking-widest"
+                        >
+                            <RotateCcw size={14} className="group-hover:rotate-180 transition-transform duration-500" />
+                            Reset
+                        </button>
+                        <button
+                            onClick={handleExportPDF}
+                            disabled={exportingPdf}
+                            className="group flex items-center gap-2 px-6 py-3 text-[11px] font-black text-secondary-foreground bg-secondary border border-secondary/20 rounded-2xl hover:shadow-lg transition-all duration-300 uppercase tracking-widest disabled:opacity-50"
+                        >
+                            <FileDown size={14} className="group-hover:translate-y-0.5 transition-transform" />
+                            {exportingPdf ? "Exportando..." : "Descargar"}
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="group flex items-center gap-2 px-8 py-3 text-[11px] font-black text-primary-foreground bg-primary rounded-2xl border border-primary/20 hover:shadow-xl transition-all duration-300 uppercase tracking-widest disabled:opacity-50"
+                        >
+                            <Save size={14} />
+                            {saving ? "Guardando..." : "Finalizar Registro"}
+                        </button>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => setForm({ ...form, checklist: INITIAL_CHECKLIST, markers: [] })}
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-muted-foreground bg-muted rounded-xl hover:bg-muted/80 border border-border transition-colors"
-                    >
-                        <RotateCcw size={15} />
-                        Limpiar
-                    </button>
-                    <button
-                        onClick={handleExportPDF}
-                        disabled={exportingPdf}
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-secondary-foreground bg-secondary rounded-xl hover:bg-secondary/90 transition-colors shadow-lg shadow-secondary/20 disabled:opacity-50"
-                    >
-                        <FileDown size={15} />
-                        {exportingPdf ? "Exportando..." : "Exportar PDF"}
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-primary-foreground bg-primary rounded-xl hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50"
-                    >
-                        <Save size={15} />
-                        {saving ? "Guardando..." : "Guardar Ficha"}
-                    </button>
-                </div>
-            </div>
 
-            {/* ── SECTION 1: Cabecera ── */}
-            <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                <SectionHeader number="1" title="Características Generales y Datos del Vehículo" />
-                <div className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {/* Col 1: Characteristics */}
-                        <div className="space-y-4">
-                            <h4 className="text-xs font-black text-muted-foreground uppercase tracking-wider pb-2 border-b border-border">
-                                Características Generales
-                            </h4>
-                            {[
-                                { key: "marca", label: "Marca" },
-                                { key: "color", label: "Color" },
-                                { key: "modelo", label: "Modelo" },
-                                { key: "anio", label: "Año" },
-                                { key: "tipo", label: "Tipo" },
-                                { key: "placa", label: "Placa / Patente" },
-                            ].map(({ key, label }) => (
-                                <FormField
-                                    key={key}
-                                    label={label}
-                                    value={(form as any)[key]}
-                                    onChange={(v) => setField(key as keyof ReceptionFormData, v as any)}
-                                    placeholder={`Ingrese ${label.toLowerCase()}...`}
-                                    uppercase={key === "placa"}
-                                />
-                            ))}
-                        </div>
-
-                        {/* Col 2: Kilometraje */}
-                        <div className="space-y-4">
-                            <h4 className="text-xs font-black text-muted-foreground uppercase tracking-wider pb-2 border-b border-border">
-                                Kilometraje y Fecha
-                            </h4>
-                            <FormField
-                                label="De recepción"
-                                value={form.km_entrega}
-                                onChange={(v) => setField("km_entrega", v)}
-                                type="number"
-                                placeholder="0"
-                                suffix="km"
-                            />
-                            <FormField
-                                label="Fecha de recepción"
-                                value={form.fecha_entrega}
-                                onChange={(v) => setField("fecha_entrega", v)}
-                                type="date"
-                            />
-                            <FormField
-                                label="De devolución"
-                                value={form.km_devolucion}
-                                onChange={(v) => setField("km_devolucion", v)}
-                                type="number"
-                                placeholder="0"
-                                suffix="km"
-                            />
-                            <FormField
-                                label="Fecha de devolución"
-                                value={form.fecha_devolucion}
-                                onChange={(v) => setField("fecha_devolucion", v)}
-                                type="date"
-                            />
-                        </div>
-
-                        {/* Col 3: Funcionarios */}
-                        <div className="space-y-4">
-                            <h4 className="text-xs font-black text-muted-foreground uppercase tracking-wider pb-2 border-b border-border">
-                                Funcionarios Responsables
-                            </h4>
-                            <div className="p-3 bg-primary/5 rounded-xl border border-primary/10">
-                                <p className="text-[10px] font-black text-primary uppercase mb-2">Recepción del Vehículo</p>
-                                <FormField
-                                    label="Funcionario que recibe"
-                                    value={form.funcionario_recibe}
-                                    onChange={(v) => setField("funcionario_recibe", v)}
-                                    placeholder="Nombre completo..."
-                                />
-                                <FormField
-                                    label="Lic. N°"
-                                    value={form.licencia_recibe}
-                                    onChange={(v) => setField("licencia_recibe", v)}
-                                    placeholder="N° licencia..."
-                                />
-                            </div>
-
-                            <div className="p-3 bg-muted/50 rounded-xl border border-border">
-                                <p className="text-[10px] font-black text-muted-foreground uppercase mb-2">Entrega al Cliente (Devolución)</p>
-                                <FormField
-                                    label="Funcionario que entrega"
-                                    value={form.funcionario_entrega}
-                                    onChange={(v) => setField("funcionario_entrega", v)}
-                                    placeholder="Nombre completo..."
-                                />
-                                <FormField
-                                    label="Lic. N°"
-                                    value={form.licencia_entrega}
-                                    onChange={(v) => setField("licencia_entrega", v)}
-                                    placeholder="N° licencia..."
-                                />
-                            </div>
-
-                            {/* Progress card */}
-                            <div className="mt-6 p-4 bg-muted/50 rounded-xl border border-border">
-                                <p className="text-xs font-bold text-muted-foreground mb-3">Progreso del Checklist</p>
-                                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full bg-primary transition-all duration-500"
-                                        style={{ width: `${progress}%` }}
-                                    />
-                                </div>
-                                <div className="flex justify-between mt-2 text-xs font-bold">
-                                    <span className="text-muted-foreground">{checkedItems}/{totalItems} ítems</span>
-                                    <span className="text-primary">{progress}%</span>
-                                </div>
-                                <div className="flex gap-3 mt-3">
-                                    <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-bold">
-                                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                                        {goodCount} Buenos
-                                    </span>
-                                    <span className="flex items-center gap-1 text-[11px] text-red-600 font-bold">
-                                        <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-                                        {badCount} Malos
-                                    </span>
-                                    <span className="flex items-center gap-1 text-[11px] text-muted-foreground font-bold">
-                                        <span className="w-2 h-2 rounded-full bg-slate-400 inline-block" />
-                                        {form.markers.length} Daños
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
+                {/* Progress bar */}
+                <div className="mt-8 pt-6 border-t border-border/40">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Estado de la Inspección</span>
+                        <span className="text-[10px] font-black text-primary uppercase">{progress}% COMPLETADO</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-primary transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(37,99,235,0.5)]"
+                            style={{ width: `${progress}%` }}
+                        />
                     </div>
                 </div>
             </div>
 
-            {/* ── SECTION 2: Checklist ── */}
-            <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                <SectionHeader number="2" title="Inventario y Control de Condiciones Generales del Vehículo" />
-                <div className="p-6">
-                    {/* Legend */}
-                    <div className="flex items-center gap-4 mb-5 p-3 bg-muted/50 rounded-xl border border-border">
-                        <span className="text-xs font-bold text-muted-foreground">Leyenda:</span>
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-                            <CheckCircle size={14} /> Bueno
-                        </span>
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-red-600">
-                            <XCircle size={14} /> Malo
-                        </span>
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                            <Minus size={14} /> No Aplica
-                        </span>
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+                {/* ── Left Column: Data ── */}
+                <div className="xl:col-span-4 space-y-8">
+                    {/* Vehicle Data */}
+                    <div className={`p-8 bg-card border rounded-[2.5rem] shadow-sm transition-all duration-500 ${activeTab === 'reception' ? 'border-primary/20 ring-4 ring-primary/5' : 'border-secondary/20 ring-4 ring-secondary/5'}`}>
+                        <SectionHeader
+                            icon={Car}
+                            title="Identificación del Vehículo"
+                            subtitle={activeTab === 'reception' ? "Estado de entrada" : "Estado de salida"}
+                        />
+                        <div className="grid grid-cols-2 gap-5">
+                            <FormField label="Placa" value={form.placa} onChange={(v) => setField("placa", v)} uppercase placeholder="PATENTE" />
+                            <FormField label="Año" value={form.anio} onChange={(v) => setField("anio", v)} type="number" placeholder="2024" />
+                            <FormField label="Marca" value={form.marca} onChange={(v) => setField("marca", v)} placeholder="MARCA" />
+                            <FormField label="Modelo" value={form.modelo} onChange={(v) => setField("modelo", v)} placeholder="MODELO" />
+                            <FormField label="Color" value={form.color} onChange={(v) => setField("color", v)} placeholder="COLOR" />
+                            <FormField label="Tipo" value={form.tipo} onChange={(v) => setField("tipo", v)} placeholder="TIPO" />
+                        </div>
+
+                        <div className="mt-8 pt-6 border-t border-border/40 space-y-5">
+                            <div className={`p-4 rounded-2xl transition-all ${activeTab === 'reception' ? 'bg-primary/5 border border-primary/20' : 'bg-muted/40'}`}>
+                                <FormField
+                                    label="Kilometraje Recepción"
+                                    value={form.km_entrega}
+                                    onChange={(v) => setField("km_entrega", v)}
+                                    suffix="KM"
+                                    placeholder="0"
+                                />
+                            </div>
+                            <div className={`p-4 rounded-2xl transition-all ${activeTab === 'dispatch' ? 'bg-secondary/5 border border-secondary/20' : 'bg-muted/40'}`}>
+                                <FormField
+                                    label="Kilometraje Entrega"
+                                    value={form.km_devolucion}
+                                    onChange={(v) => setField("km_devolucion", v)}
+                                    suffix="KM"
+                                    placeholder="0"
+                                />
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                        {form.checklist.map((group, gi) => (
-                            <div key={group.title}>
-                                <h4 className="text-xs font-black text-primary uppercase tracking-wider pb-2 mb-3 border-b-2 border-primary/20">
-                                    {group.title}
-                                </h4>
-                                <div className="space-y-2">
-                                    {group.items.map((item) => (
-                                        <div
-                                            key={item.id}
-                                            className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border transition-all ${item.status === "good"
-                                                ? "bg-emerald-50 border-emerald-200"
-                                                : item.status === "bad"
-                                                    ? "bg-red-50 border-red-200"
-                                                    : item.status === "na"
-                                                        ? "bg-slate-50 border-slate-200"
-                                                        : "bg-card border-border hover:border-border/80"
-                                                }`}
-                                        >
-                                            <span className={`text-xs font-semibold flex-1 leading-tight ${item.status === "good" ? "text-emerald-800" :
-                                                item.status === "bad" ? "text-red-800" :
-                                                    item.status === "na" ? "text-slate-500 line-through" :
-                                                        "text-foreground"
-                                                }`}>
-                                                {item.label}
-                                            </span>
-                                            <CheckButton
-                                                status={item.status}
-                                                onSetStatus={(s) => updateCheckStatus(gi, item.id, s)}
-                                            />
-                                        </div>
-                                    ))}
+                    {/* People */}
+                    <div className="p-8 bg-card border border-border/60 rounded-[2.5rem] shadow-sm">
+                        <SectionHeader icon={User} title="Responsables" />
+                        <div className="space-y-6">
+                            <div className={`p-5 rounded-2xl border transition-all ${activeTab === 'reception' ? 'bg-primary/5 border-primary/20' : 'bg-muted/20 border-transparent text-muted-foreground'}`}>
+                                <p className="text-[10px] font-black uppercase mb-4 opacity-70 flex items-center gap-2">
+                                    <LogIn size={10} /> Admisión Taller
+                                </p>
+                                <div className="space-y-4">
+                                    <FormField label="Técnico Validador" value={form.funcionario_recibe} onChange={(v) => setField("funcionario_recibe", v)} />
+                                    <FormField label="Cliente que entrega" value={form.funcionario_entrega} onChange={(v) => setField("funcionario_entrega", v)} />
+                                    <FormField label="Fecha Entrada" value={form.fecha_entrega} onChange={(v) => setField("fecha_entrega", v)} type="date" />
                                 </div>
                             </div>
-                        ))}
+
+                            <div className={`p-5 rounded-2xl border transition-all ${activeTab === 'dispatch' ? 'bg-secondary/5 border-secondary/20' : 'bg-muted/20 border-transparent text-muted-foreground rotate-1'}`}>
+                                <p className="text-[10px] font-black uppercase mb-4 opacity-70 flex items-center gap-2">
+                                    <LogOut size={10} /> Entrega Cliente
+                                </p>
+                                <div className="space-y-4">
+                                    <FormField label="Técnico Despachador" value={form.funcionario_entrega} onChange={(v) => setField("funcionario_entrega", v)} />
+                                    <FormField label="Fecha Salida" value={form.fecha_devolucion} onChange={(v) => setField("fecha_devolucion", v)} type="date" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Fuel */}
+                    <div className="p-8 bg-card border border-border/60 rounded-[2.5rem] shadow-sm">
+                        <div className="flex items-center justify-between mb-8">
+                            <SectionHeader icon={Fuel} title="Nivel de Combustible" />
+                            <div className="text-xl font-black text-primary">{form.fuel_level}%</div>
+                        </div>
+                        <FuelGauge value={form.fuel_level} onChange={(v) => setField("fuel_level", v)} />
+
+                        <div className="mt-10 pt-8 border-t border-border/40">
+                            <SectionHeader icon={AlertCircle} title="Observaciones" />
+                            <textarea
+                                value={form.observaciones}
+                                onChange={(e) => setField("observaciones", e.target.value)}
+                                className="w-full form-input text-sm min-h-[140px] bg-muted/30 border-transparent rounded-[1.5rem] p-5 focus:bg-white focus:border-primary/20 transition-all font-medium"
+                                placeholder="Anota cualquier detalle adicional importante..."
+                            />
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            {/* ── SECTION 3: Diagrama + Combustible ── */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                {/* Vehicle Diagram */}
-                <div className="xl:col-span-2 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                    <SectionHeader number="3" title="Observaciones de Orden General y Estado" />
-                    <div className="p-6">
+                {/* ── Right Column: Diagram & Checklist ── */}
+                <div className="xl:col-span-8 space-y-8">
+                    {/* Vehicle Diagram */}
+                    <div className="p-8 bg-card border border-border rounded-[2.5rem] shadow-sm relative group overflow-hidden">
+                        <div className="absolute top-0 right-0 p-8">
+                            <div className={`px-4 py-2 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all ${activeTab === 'dispatch' ? 'bg-secondary/10 border-secondary/20 text-secondary' : 'bg-primary/10 border-primary/20 text-primary'}`}>
+                                <div className={`w-2 h-2 rounded-full animate-ping ${activeTab === 'dispatch' ? 'bg-secondary' : 'bg-primary'}`} />
+                                Modo {activeTab === 'reception' ? 'RECEPCIÓN' : 'DESPACHO'}
+                            </div>
+                        </div>
+
+                        <SectionHeader icon={Car} title="Estado Exterior" subtitle="Haz clic para registrar daños en la zona indicada" />
+
                         <VehicleDiagram
                             markers={form.markers}
                             onAddMarker={handleAddMarker}
                             onClickMarker={handleClickMarker}
                         />
-                        {form.markers.length === 0 && (
-                            <p className="text-center text-xs text-muted-foreground mt-4 italic">
-                                Haz clic en cualquier punto del diagrama para marcar un daño o rasguño.
-                            </p>
-                        )}
-                    </div>
-                </div>
 
-                {/* Fuel Gauge */}
-                <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                    <SectionHeader number="4" title="Nivel de Combustible" />
-                    <div className="p-6 flex flex-col items-center justify-center h-[calc(100%-4rem)]">
-                        <FuelGauge
-                            value={form.fuel_level}
-                            onChange={(v) => setField("fuel_level", v)}
-                        />
+                        <div className="mt-10 p-5 bg-muted/40 rounded-[2rem] border border-border/40 flex flex-col md:flex-row items-center justify-between gap-6">
+                            <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-red-500 shadow-lg shadow-red-500/20" />
+                                    <span className="text-[10px] font-black text-muted-foreground uppercase opacity-70">Recepción (Entrada)</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-blue-500 shadow-lg shadow-blue-500/20" />
+                                    <span className="text-[10px] font-black text-muted-foreground uppercase opacity-70">Despacho (Salida)</span>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl text-[10px] font-medium text-muted-foreground border border-border/60 italic">
+                                <AlertCircle size={14} className="text-primary" /> Los registros marcados con "S" son incidentes de salida.
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Inventory */}
+                    <div className="p-8 bg-card border border-border rounded-[3rem] shadow-sm">
+                        <SectionHeader icon={CheckCircle} title="Checklist de Inventario" subtitle="Revisión detallada por secciones" />
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-12">
+                            {form.checklist.map((group, gIdx) => (
+                                <div key={group.title} className="space-y-5">
+                                    <h4 className="flex items-center gap-3 text-[11px] font-black text-primary uppercase tracking-[0.25em] mb-4">
+                                        <div className="w-1 h-5 bg-primary rounded-full" />
+                                        {group.title}
+                                    </h4>
+                                    <div className="space-y-1.5">
+                                        {group.items.map((item) => (
+                                            <div
+                                                key={item.id}
+                                                className="flex items-center justify-between py-2.5 px-3 rounded-2xl hover:bg-muted/40 transition-all border border-transparent hover:border-border/40 group/item"
+                                            >
+                                                <span className="text-xs font-bold text-muted-foreground group-hover/item:text-foreground transition-colors mr-4">
+                                                    {item.label}
+                                                </span>
+                                                <StatusButtons
+                                                    status={item.status}
+                                                    onSetStatus={(s) => updateCheckStatus(gIdx, item.id, s)}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* ── SECTION 4: Observaciones ── */}
-            <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                <SectionHeader number="5" title="Observaciones Generales" />
-                <div className="p-6">
-                    <textarea
-                        value={form.observaciones}
-                        onChange={(e) => setField("observaciones", e.target.value)}
-                        placeholder="Ingrese observaciones adicionales sobre el estado general del vehículo..."
-                        rows={4}
-                        className="w-full form-input text-sm resize-none"
-                    />
-                </div>
-            </div>
-
-            {/* ── Damage Modal ── */}
-            {damageModal !== null && (
+            {/* Modals */}
+            {damageModal && (
                 <DamageModal
                     marker={damageModal.marker}
                     tempCoords={damageModal.tempCoords}
                     onSave={handleSaveDamage}
-                    onDelete={handleDeleteMarker}
+                    onDelete={handleDeleteDamage}
                     onClose={() => setDamageModal(null)}
                     otId={otId}
                 />
             )}
-        </div>
-    );
-}
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function SectionHeader({ number, title }: { number: string; title: string }) {
-    return (
-        <div className="flex items-center gap-3 px-6 py-4 bg-muted/30 border-b border-border">
-            <span className="w-7 h-7 rounded-full bg-primary text-primary-foreground text-xs font-black flex items-center justify-center shrink-0">
-                {number}
-            </span>
-            <h3 className="text-sm font-black text-foreground uppercase tracking-wide">{title}</h3>
+            {/* Print Template (Hidden from UI view) */}
+            <div className="hidden">
+                <ReceptionDocumentTemplate data={form} otId={otId} activeTab={activeTab} />
+            </div>
         </div>
     );
 }
@@ -637,19 +629,21 @@ function FormField({
     uppercase?: boolean;
 }) {
     return (
-        <div>
-            <label className="block text-xs font-bold text-muted-foreground mb-1">{label}</label>
+        <div className="group">
+            <label className="block text-[10px] font-black text-muted-foreground mb-2 px-1 uppercase tracking-widest group-focus-within:text-primary transition-colors">
+                {label}
+            </label>
             <div className="relative">
                 <input
                     type={type}
-                    value={value}
+                    value={value || ""}
                     onChange={(e) => onChange(uppercase ? e.target.value.toUpperCase() : e.target.value)}
                     placeholder={placeholder}
-                    className={`form-input text-sm pr-${suffix ? "12" : "4"}`}
+                    className={`w-full form-input text-sm h-12 bg-muted/40 border border-transparent focus:bg-white focus:border-primary/20 rounded-[1rem] px-4 transition-all ${suffix ? "pr-14" : "pr-4"}`}
                     style={uppercase ? { textTransform: "uppercase" } : undefined}
                 />
                 {suffix && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-muted-foreground uppercase pointer-events-none">
                         {suffix}
                     </span>
                 )}

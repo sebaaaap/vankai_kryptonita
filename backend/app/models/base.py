@@ -204,6 +204,9 @@ class Ticket(BaseModel):
     
     payment_method = Column(String, default="CASH")
     
+    document_type = Column(String, default="boleta") # "boleta" or "factura"
+    comment = Column(Text, nullable=True)
+    
     session_id = Column(UUID(as_uuid=True), ForeignKey("cash_sessions.id"), nullable=False, index=True)
     session = relationship("CashSession", back_populates="tickets")
     

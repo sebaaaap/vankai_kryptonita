@@ -190,9 +190,15 @@ export function ProductModal({
                 <select
                   className="form-input"
                   value={formData.product_type}
-                  onChange={(e) =>
-                    setFormData({ ...formData, product_type: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const newType = e.target.value
+                    setFormData({
+                      ...formData,
+                      product_type: newType,
+                      // Al ser servicio, limpiamos campos que no aplican
+                      ...(newType === "SERVICE" ? { location_id: "", uom: "" } : {}),
+                    })
+                  }}
                 >
                   <option value="STORABLE">Producto inventariable</option>
                   <option value="SERVICE">Servicio / Mano de obra</option>
@@ -216,6 +222,7 @@ export function ProductModal({
                   ))}
                 </select>
               </div>
+              {formData.product_type !== "SERVICE" && (
               <div>
                 <FormLabel>Unidad de medida (UoM)</FormLabel>
                 <select
@@ -231,6 +238,8 @@ export function ProductModal({
                   <option value="metros">Metros (m)</option>
                 </select>
               </div>
+              )}
+              {formData.product_type !== "SERVICE" && (
               <div>
                 <FormLabel>Ubicación</FormLabel>
                 <select
@@ -266,6 +275,7 @@ export function ProductModal({
                     })}
                 </select>
               </div>
+              )}
             </FormSection>
           </div>
 

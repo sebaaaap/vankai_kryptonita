@@ -242,7 +242,14 @@ def list_products(
         
     results = []
     for barcode, items in grouped.items():
-        primary = items[0] # Usamos el primero como referencia para datos maestros
+        # REGLA: El ID representativo debe ser de una ubicación que NO sea Mermas.
+        # Así, si se usa en compras/reabastecimiento, el stock nunca irá a Mermas por defecto.
+        non_merma_items = [
+            i for i in items
+            if i.location is None or i.location.name != "Pasillo Mermas"
+        ]
+        # Usamos el primero no-merma como referencia; si TODOS están en mermas, usamos el primero disponible.
+        primary = non_merma_items[0] if non_merma_items else items[0]
         
         # Calcular stock total SOLO de ubicaciones vendibles (excluir Pasillo Mermas)
         # Si location es None, asumimos vendible (stock general sin asignar)

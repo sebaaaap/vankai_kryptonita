@@ -393,7 +393,9 @@ export function PurchasesList() {
                                             }}
                                         >
                                             <option value="">Buscar producto...</option>
-                                            {products.map((p) => (
+                                            {products
+                                              .filter((p: any) => p.product_type !== "SERVICE")
+                                              .map((p) => (
                                                 <option key={p.id} value={p.id}>
                                                     {p.name} ({p.barcode})
                                                 </option>

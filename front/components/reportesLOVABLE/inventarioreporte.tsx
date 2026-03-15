@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
     Search, Filter, MapPin, Package, Download, AlertCircle, TrendingDown,
@@ -108,8 +108,17 @@ export default function InventoryReports() {
         router.push(`?${params.toString()}`);
     };
 
-    const handleDownload = () => {
-        toast.info("Exportando...", { description: "El reporte se descargará en breve." });
+    const [isExporting, setIsExporting] = useState(false);
+    const handleDownload = async () => {
+        try {
+            setIsExporting(true);
+            await apiService.exportInventoryExcel(categoryFilter, aisleFilter);
+            toast.success("✅ Excel de inventario generado");
+        } catch (e) {
+            toast.error("Error al exportar inventario.");
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     if (isLoading || !data) {
@@ -178,9 +187,14 @@ export default function InventoryReports() {
                                 Auditoría de Existencias
                             </h3>
                             <div className="flex gap-2">
-                                <Button size="sm" variant="outline" onClick={handleDownload}>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleDownload}
+                                    disabled={isExporting}
+                                >
                                     <Download size={14} className="mr-2" />
-                                    Excel
+                                    {isExporting ? "Generando..." : "Excel"}
                                 </Button>
                             </div>
                         </div>

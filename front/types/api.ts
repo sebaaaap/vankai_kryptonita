@@ -75,6 +75,8 @@ export interface SaleResponse {
     payments: any[];
     customer_id?: string;
     customer?: any;
+    document_type?: string;
+    comment?: string;
 }
 
 export interface CashRegisterResponse {

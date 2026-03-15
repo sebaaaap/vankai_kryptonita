@@ -103,6 +103,8 @@ class SaleCreate(BaseModel):
     session_id: UUID = Field(..., description="Toda venta debe estar vinculada a una sesión")
     customer_id: Optional[UUID] = None
     vehicle_id: Optional[UUID] = None
+    document_type: str = "boleta"
+    comment: Optional[str] = None
     
     @validator('payments')
     def validate_payments(cls, v, values):
@@ -133,6 +135,8 @@ class SaleResponse(BaseModel):
     payments: List[PaymentResponse]
     customer_id: Optional[UUID] = None
     customer: Optional[CustomerMini] = None # Simplified customer info
+    document_type: Optional[str] = "boleta"
+    comment: Optional[str] = None
     
     class Config:
         from_attributes = True

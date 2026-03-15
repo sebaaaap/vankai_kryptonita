@@ -138,6 +138,65 @@ export const apiService = {
         return response.data;
     },
 
+    async exportSalesExcel(startDate?: string, endDate?: string): Promise<void> {
+        const params: any = {};
+        if (startDate) params.start_date = startDate;
+        if (endDate) params.end_date = endDate;
+        const response = await api.get("/reports/sales/export", {
+            params,
+            responseType: "blob",
+        });
+        // Disparar descarga en el navegador
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement("a");
+        link.href = url;
+        const from = startDate?.replace(/-/g, "") ?? "inicio";
+        const to = endDate?.replace(/-/g, "") ?? "hoy";
+        link.setAttribute("download", `ventas_${from}_${to}.xlsx`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+    },
+
+    async exportInventoryExcel(category?: string, aisle?: string): Promise<void> {
+        const params: any = {};
+        if (category && category !== "all") params.category = category;
+        if (aisle) params.aisle = aisle;
+        const response = await api.get("/reports/inventory/export", {
+            params,
+            responseType: "blob",
+        });
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", `inventario_${new Date().toISOString().split('T')[0]}.xlsx`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+    },
+
+    async exportPurchasesExcel(startDate?: string, endDate?: string): Promise<void> {
+        const params: any = {};
+        if (startDate) params.start_date = startDate;
+        if (endDate) params.end_date = endDate;
+        const response = await api.get("/reports/purchases/export", {
+            params,
+            responseType: "blob",
+        });
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement("a");
+        link.href = url;
+        const from = startDate?.replace(/-/g, "") ?? "inicio";
+        const to = endDate?.replace(/-/g, "") ?? "hoy";
+        link.setAttribute("download", `compras_${from}_${to}.xlsx`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+    },
+
     // Customers
     async getCustomers(q?: string): Promise<any[]> {
         const params: any = {};

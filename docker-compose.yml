@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: antigravity_db
+    container_name: pos_db_local
     restart: always
     environment:
       POSTGRES_USER: admin
@@ -11,6 +11,27 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: pos_backend_local
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://admin:password123@db:5432/pos_db
+      - DEPLOYMENT_MODE=SERVER
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+  front:
+    build: ./front
+    container_name: pos_front_local
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:

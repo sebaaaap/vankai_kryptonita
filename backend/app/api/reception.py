@@ -34,6 +34,7 @@ class DamageMarkerSchema(BaseModel):
     photo_url: Optional[str] = None
     coords: dict  # {x: float, y: float}
     view: str     # "top" | "front" | "side"
+    type: Optional[str] = "reception"  # "reception" | "dispatch"
 
 class ChecklistItemSchema(BaseModel):
     id: str

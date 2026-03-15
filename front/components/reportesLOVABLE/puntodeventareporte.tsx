@@ -19,7 +19,7 @@ import {
     ChartContainer, ChartTooltip, ChartTooltipContent
 } from "@/components/ui/chart";
 import {
-    AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer
+    AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, ReferenceLine
 } from "recharts";
 import useSWR from "swr";
 import { apiService } from "@/services/apiService";
@@ -30,6 +30,114 @@ import { Input } from "@/components/ui/input";
 
 const fmt = (n: number) =>
     n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+
+/** Retorna fecha en formato YYYY-MM-DD para input[type=date] */
+const toDateStr = (d: Date) => d.toISOString().split("T")[0];
+
+// Presets de rango rápido
+const DATE_PRESETS = [
+    {
+        label: "Ayer",
+        getRange: () => {
+            const d = new Date();
+            d.setDate(d.getDate() - 1);
+            const s = toDateStr(d);
+            return { from: s, to: s };
+        },
+    },
+    {
+        label: "7 días",
+        getRange: () => {
+            const to = new Date();
+            const from = new Date();
+            from.setDate(from.getDate() - 6);
+            return { from: toDateStr(from), to: toDateStr(to) };
+        },
+    },
+    {
+        label: "1 mes",
+        getRange: () => {
+            const to = new Date();
+            const from = new Date();
+            from.setMonth(from.getMonth() - 1);
+            return { from: toDateStr(from), to: toDateStr(to) };
+        },
+    },
+    {
+        label: "3 meses",
+        getRange: () => {
+            const to = new Date();
+            const from = new Date();
+            from.setMonth(from.getMonth() - 3);
+            return { from: toDateStr(from), to: toDateStr(to) };
+        },
+    },
+];
+
+// ── Date Range Selector ────────────────────────────────
+
+function DateRangeSelector({
+    startDate,
+    endDate,
+    onChange,
+}: {
+    startDate: string;
+    endDate: string;
+    onChange: (from: string, to: string) => void;
+}) {
+    // Detectar qué preset está activo según las fechas actuales
+    const activePreset = DATE_PRESETS.find((p) => {
+        const r = p.getRange();
+        return r.from === startDate && r.to === endDate;
+    })?.label ?? null;
+
+    return (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-wrap">
+            {/* Botones rápidos */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+                {DATE_PRESETS.map((preset) => {
+                    const isActive = activePreset === preset.label;
+                    return (
+                        <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => {
+                                const r = preset.getRange();
+                                onChange(r.from, r.to);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${isActive
+                                ? "bg-primary text-primary-foreground border-primary shadow-sm shadow-primary/30"
+                                : "bg-muted text-muted-foreground border-border hover:text-foreground hover:bg-muted/80"
+                                }`}
+                        >
+                            {preset.label}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Divider */}
+            <span className="hidden sm:block text-border">|</span>
+
+            {/* Inputs manuales */}
+            <div className="flex items-center gap-2">
+                <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => onChange(e.target.value, endDate)}
+                    className="w-[130px] h-8 text-xs"
+                />
+                <span className="text-muted-foreground text-xs">—</span>
+                <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => onChange(startDate, e.target.value)}
+                    className="w-[130px] h-8 text-xs"
+                />
+            </div>
+        </div>
+    );
+}
 
 // ── KPI Card ───────────────────────────────────────────
 
@@ -119,10 +227,39 @@ function SalesReport() {
         router.push(`?${params.toString()}`);
     };
 
+    const handleRangeChange = (from: string, to: string) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (from) params.set("from", from); else params.delete("from");
+        if (to) params.set("to", to); else params.delete("to");
+        router.push(`?${params.toString()}`);
+    };
+
+    const [isExporting, setIsExporting] = useState(false);
+    const handleExport = async () => {
+        try {
+            setIsExporting(true);
+            await apiService.exportSalesExcel(startDate || undefined, endDate || undefined);
+            toast({ title: "✅ Excel descargado", description: "Revisa tu carpeta de Descargas." });
+        } catch (e) {
+            toast({ title: "Error", description: "No se pudo generar el Excel.", variant: "destructive" });
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     const { data, isLoading } = useSWR(
         [`/reports/sales`, startDate, endDate],
         () => apiService.getReportSales(startDate, endDate)
     );
+
+    // Determinar modo automático: si el rango es 1 día → hora, si es varios días → día
+    const isSingleDay = startDate === endDate || (!startDate && !endDate);
+    const [chartMode, setChartMode] = useState<"hour" | "day">(isSingleDay ? "hour" : "day");
+
+    // Re-ajustar modo cuando cambia el rango
+    React.useEffect(() => {
+        setChartMode(isSingleDay ? "hour" : "day");
+    }, [isSingleDay]);
 
     if (isLoading || !data) {
         return (
@@ -134,55 +271,198 @@ function SalesReport() {
         );
     }
 
-    const { kpis, chart_data, recent_transactions } = data;
+    const { kpis, chart_data, daily_chart_data, recent_transactions } = data;
+
+    const isHourMode = chartMode === "hour";
+    const activeChartData = isHourMode ? chart_data : (daily_chart_data ?? []);
+    const xKey = isHourMode ? "hour" : "day";
+
+    // KPI de ganancia total del periodo
+    const totalGanancia = (daily_chart_data ?? []).reduce((sum: number, d: any) => sum + (d.ganancia ?? 0), 0);
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 flex-wrap">
                 <h3 className="text-lg font-semibold tracking-tight">Resumen de Ventas</h3>
-                <div className="flex items-center gap-2">
-                    <Input
-                        type="date"
-                        value={startDate || ""}
-                        onChange={(e) => handleFilterChange("from", e.target.value)}
-                        className="w-[140px]"
+                <div className="flex items-center gap-3 flex-wrap">
+                    <DateRangeSelector
+                        startDate={startDate}
+                        endDate={endDate}
+                        onChange={handleRangeChange}
                     />
-                    <span className="text-muted-foreground">-</span>
-                    <Input
-                        type="date"
-                        value={endDate || ""}
-                        onChange={(e) => handleFilterChange("to", e.target.value)}
-                        className="w-[140px]"
-                    />
+                    {/* Botón exportar Excel */}
+                    <button
+                        onClick={handleExport}
+                        disabled={isExporting}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Download size={13} />
+                        {isExporting ? "Generando..." : "Exportar Excel"}
+                    </button>
                 </div>
             </div>
 
             {/* KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <KpiCard icon={DollarSign} label="Venta Bruta Total" value={fmt(kpis.gross_sales)} sub={`Periodo seleccionado`} accent="success" />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <KpiCard icon={DollarSign} label="Venta Bruta Total" value={fmt(kpis.gross_sales)} sub="Periodo seleccionado" accent="success" />
+                <KpiCard icon={TrendingUp} label="Ganancia Bruta" value={fmt(totalGanancia)} sub="Ventas − Costo" accent="success" />
                 <KpiCard icon={Receipt} label="Ticket Promedio" value={fmt(kpis.avg_ticket)} sub={`${kpis.total_tickets} transacciones`} />
                 <KpiCard icon={CreditCard} label="Pagos Digitales" value={fmt(kpis.digital_sales)} sub="Tarjeta / Transferencia" />
             </div>
 
-            {/* Area Chart */}
+            {/* Gráfico principal con toggle hora/día */}
             <Card className="p-5">
-                <h3 className="text-sm font-semibold text-foreground mb-4">Flujo de Ventas por Hora</h3>
-                <ChartContainer config={{ ventas: { label: "Ventas", color: "hsl(var(--success))" } }} className="h-[260px] w-full">
-                    <AreaChart data={chart_data} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                        <defs>
-                            <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.3} />
-                                <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0} />
-                            </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                        <XAxis dataKey="hour" tick={{ fontSize: 11 }} className="text-muted-foreground" />
-                        <YAxis tick={{ fontSize: 11 }} className="text-muted-foreground" tickFormatter={(v) => `$${(v).toFixed(0)}`} />
-                        <ChartTooltip content={<ChartTooltipContent formatter={(value) => fmt(Number(value))} />} />
-                        <Area type="monotone" dataKey="ventas" stroke="hsl(var(--success))" strokeWidth={2} fill="url(#salesGrad)" />
-                    </AreaChart>
-                </ChartContainer>
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                    <div>
+                        <div>
+                            <h3 className="text-sm font-semibold text-foreground">
+                                {isHourMode ? "Flujo de Ventas por Hora" : "Ventas y Ganancia por Día"}
+                            </h3>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {isHourMode ? "Distribución horaria del periodo" : "Venta bruta vs ganancia por día"}
+                            </p>
+                        </div>
+                    </div>
+                    {/* Fila: leyenda + toggle */}
+                    <div className="flex items-center gap-4 flex-wrap justify-end">
+                        {/* Leyenda de líneas (solo modo día) */}
+                        {!isHourMode && (
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="inline-block w-3 h-3 rounded-full" style={{ background: "hsl(var(--primary))" }} />
+                                    <span className="text-xs text-muted-foreground font-medium">Ventas brutas</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="inline-block w-3 h-3 rounded-full" style={{ background: "hsl(var(--success))" }} />
+                                    <span className="text-xs text-muted-foreground font-medium">Ganancia (venta − costo)</span>
+                                </div>
+                            </div>
+                        )}
+                        {/* Toggle hora / día */}
+                        <div className="flex items-center gap-1 bg-muted rounded-lg p-1 border border-border">
+                            <button
+                                onClick={() => setChartMode("hour")}
+                                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${isHourMode
+                                    ? "bg-card text-primary shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
+                                    }`}
+                            >
+                                Por Hora
+                            </button>
+                            <button
+                                onClick={() => setChartMode("day")}
+                                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${!isHourMode
+                                    ? "bg-card text-primary shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
+                                    }`}
+                            >
+                                Por Día
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {isHourMode ? (
+                    <ChartContainer
+                        config={{ ventas: { label: "Ventas", color: "hsl(var(--success))" } }}
+                        className="h-[260px] w-full"
+                    >
+                        <AreaChart data={activeChartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="salesGradH" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <XAxis dataKey={xKey} tick={{ fontSize: 11 }} className="text-muted-foreground" />
+                            <YAxis
+                                tick={{ fontSize: 11 }}
+                                className="text-muted-foreground"
+                                tickFormatter={(v) => `$${v.toFixed(0)}`}
+                                domain={[0, 'auto']}
+                            />
+                            <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 3" />
+                            <ChartTooltip content={<ChartTooltipContent formatter={(value) => fmt(Number(value))} />} />
+                            <Area type="monotone" dataKey="ventas" stroke="hsl(var(--success))" strokeWidth={2} fill="url(#salesGradH)" />
+                        </AreaChart>
+                    </ChartContainer>
+                ) : (
+                    <ChartContainer
+                        config={{
+                            ventas: { label: "Ventas brutas", color: "hsl(var(--primary))" },
+                            ganancia: { label: "Ganancia (venta−costo)", color: "hsl(var(--success))" },
+                        }}
+                        className="h-[260px] w-full"
+                    >
+                        <AreaChart data={activeChartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="ventasGrad" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.25} />
+                                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                                </linearGradient>
+                                <linearGradient id="gananciaGrad" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.35} />
+                                    <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <XAxis dataKey={xKey} tick={{ fontSize: 10 }} className="text-muted-foreground" interval="preserveStartEnd" />
+                            <YAxis
+                                tick={{ fontSize: 11 }}
+                                className="text-muted-foreground"
+                                tickFormatter={(v) => `$${v.toFixed(0)}`}
+                                domain={[(dataMin: number) => Math.min(0, dataMin), 'auto']}
+                            />
+                            <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={1.5} strokeDasharray="4 3" label={{ value: "$0", position: "insideLeft", fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                            <ChartTooltip content={<ChartTooltipContent formatter={(value) => fmt(Number(value))} />} />
+                            <Area type="monotone" dataKey="ventas" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#ventasGrad)" />
+                            <Area type="monotone" dataKey="ganancia" stroke="hsl(var(--success))" strokeWidth={2} fill="url(#gananciaGrad)" />
+                        </AreaChart>
+                    </ChartContainer>
+                )}
             </Card>
+
+            {/* Gráfico de barras: Ganancia bruta por día (solo modo día) */}
+            {!isHourMode && (daily_chart_data ?? []).length > 0 && (
+                <Card className="p-5">
+                    <div className="mb-4">
+                        <h3 className="text-sm font-semibold text-foreground">Ganancia Bruta por Día</h3>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Diferencia entre precio de venta y costo de adquisición
+                        </p>
+                    </div>
+                    <ChartContainer
+                        config={{ ganancia: { label: "Ganancia", color: "hsl(var(--success))" } }}
+                        className="h-[220px] w-full"
+                    >
+                        <BarChart data={daily_chart_data} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <XAxis dataKey="day" tick={{ fontSize: 10 }} className="text-muted-foreground" interval="preserveStartEnd" />
+                            <YAxis
+                                tick={{ fontSize: 11 }}
+                                className="text-muted-foreground"
+                                tickFormatter={(v) => `$${v.toFixed(0)}`}
+                                domain={[(dataMin: number) => Math.min(0, dataMin), 'auto']}
+                            />
+                            <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={1.5} strokeDasharray="4 3" />
+                            <ChartTooltip
+                                content={
+                                    <ChartTooltipContent
+                                        formatter={(value, name) => [fmt(Number(value)), "Ganancia bruta"]}
+                                    />
+                                }
+                            />
+                            <Bar
+                                dataKey="ganancia"
+                                fill="hsl(var(--success))"
+                                radius={[5, 5, 0, 0]}
+                                maxBarSize={40}
+                            />
+                        </BarChart>
+                    </ChartContainer>
+                </Card>
+            )}
 
             {/* Transactions Table */}
             <Card className="overflow-hidden">
@@ -194,6 +474,7 @@ function SalesReport() {
                         <TableRow>
                             <TableHead className="table-header">ID Venta</TableHead>
                             <TableHead className="table-header">Cajero</TableHead>
+                            <TableHead className="table-header">Doc.</TableHead>
                             <TableHead className="table-header">Método de Pago</TableHead>
                             <TableHead className="table-header text-right">Total</TableHead>
                             <TableHead className="table-header text-center">Estado</TableHead>
@@ -205,8 +486,12 @@ function SalesReport() {
                                 <TableCell className="font-mono text-xs">{t.id}</TableCell>
                                 <TableCell className="text-sm">{t.cajero}</TableCell>
                                 <TableCell>
+                                    <Badge variant="outline" className="text-[10px] uppercase font-semibold">
+                                        {t.document_type || "boleta"}
+                                    </Badge>
+                                </TableCell>
+                                <TableCell>
                                     <div className="flex items-center gap-2 text-sm">
-                                        {/* Icon mapping simple fallback */}
                                         {t.metodo === "efectivo" ? <Wallet size={14} /> :
                                             t.metodo === "tarjeta" ? <CreditCard size={14} /> : <Smartphone size={14} />}
                                         {t.metodo}
@@ -214,8 +499,8 @@ function SalesReport() {
                                 </TableCell>
                                 <TableCell className="text-right font-mono font-semibold text-sm">{fmt(t.total)}</TableCell>
                                 <TableCell className="text-center">
-                                    <Badge variant={t.estado === "validado" || t.estado === "Completada" ? "default" : "destructive"}
-                                        className={t.estado === "validado" || t.estado === "Completada" ? "bg-[hsl(var(--success))] hover:bg-[hsl(var(--success))]/90 text-[hsl(var(--success-foreground))]" : ""}>
+                                    <Badge variant={["validado", "pagado", "Completada", "Abierta"].includes(t.estado) ? "default" : "destructive"}
+                                        className={["validado", "pagado", "Completada", "Abierta"].includes(t.estado) ? "bg-[hsl(var(--success))] hover:bg-[hsl(var(--success))]/90 text-[hsl(var(--success-foreground))]" : ""}>
                                         {t.estado}
                                     </Badge>
                                 </TableCell>
@@ -337,10 +622,15 @@ function CashReport() {
                                     <div className="text-xs text-muted-foreground">{s.cierreHora}</div>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                    <span className={`font-mono font-semibold text-sm ${s.diferencia < 0 ? "text-destructive" : s.diferencia > 0 ? "text-[hsl(var(--success))]" : "text-muted-foreground"
-                                        }`}>
-                                        {s.diferencia > 0 ? "+" : ""}{fmt(s.diferencia)}
-                                    </span>
+                                    <div className="flex flex-col items-end">
+                                        <span className={`font-mono font-semibold text-sm ${s.diferencia < 0 ? "text-destructive" : s.diferencia > 0 ? "text-[hsl(var(--success))]" : "text-muted-foreground"
+                                            }`}>
+                                            {s.diferencia > 0 ? "+" : ""}{fmt(s.diferencia)}
+                                        </span>
+                                        <Badge variant={s.estado === "open" ? "secondary" : "outline"} className="text-[9px] h-4">
+                                            {s.estado === "open" ? "Abierta" : "Cerrada"}
+                                        </Badge>
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -387,6 +677,26 @@ function ProfitabilityReport() {
         router.push(`?${params.toString()}`);
     };
 
+    const handleRangeChange = (from: string, to: string) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (from) params.set("from", from); else params.delete("from");
+        if (to) params.set("to", to); else params.delete("to");
+        router.push(`?${params.toString()}`);
+    };
+
+    const [isExporting, setIsExporting] = useState(false);
+    const handleExport = async () => {
+        try {
+            setIsExporting(true);
+            await apiService.exportSalesExcel(startDate || undefined, endDate || undefined);
+            toast({ title: "✅ Excel descargado", description: "El reporte incluye el detalle de márgenes y costos." });
+        } catch (e) {
+            toast({ title: "Error", description: "No se pudo generar el Excel.", variant: "destructive" });
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     const { data, isLoading } = useSWR(
         [`/reports/sales/profitability`, startDate, endDate],
         () => apiService.getReportProfitability(startDate, endDate)
@@ -411,38 +721,28 @@ function ProfitabilityReport() {
         contribucion: total_margin > 0 ? (p.margen / total_margin) * 100 : 0,
     }));
 
-    const handleExport = () => {
-        toast({ title: "Próximamente", description: "La exportación a Excel estará disponible en una futura actualización." });
-    };
-
     return (
         <div className="space-y-6">
             {/* Header & Filters */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 flex-wrap">
                 <h3 className="text-lg font-semibold tracking-tight">Rentabilidad</h3>
-                <div className="flex items-center gap-2">
-                    <Input
-                        type="date"
-                        value={startDate || ""}
-                        onChange={(e) => handleFilterChange("from", e.target.value)}
-                        className="w-[140px]"
-                    />
-                    <span className="text-muted-foreground">-</span>
-                    <Input
-                        type="date"
-                        value={endDate || ""}
-                        onChange={(e) => handleFilterChange("to", e.target.value)}
-                        className="w-[140px]"
-                    />
-                </div>
+                <DateRangeSelector
+                    startDate={startDate}
+                    endDate={endDate}
+                    onChange={handleRangeChange}
+                />
             </div>
 
             {/* Export Button */}
-            <div className="flex justify-end hidden">
-                <Button variant="outline" size="sm" className="gap-2" onClick={handleExport}>
-                    <Download size={14} />
-                    Exportar
-                </Button>
+            <div className="flex justify-end">
+                <button
+                    onClick={handleExport}
+                    disabled={isExporting}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <Download size={13} />
+                    {isExporting ? "Generando..." : "Exportar Excel de Rentabilidad"}
+                </button>
             </div>
 
             {/* KPIs */}

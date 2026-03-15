@@ -172,12 +172,14 @@ export function ProductsPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const isService = formData.product_type === "SERVICE";
         const payload = {
             ...formData,
             price: parseFloat(formData.price) || 0,
             cost: parseFloat(formData.cost) || 0,
-            location_id: formData.location_id ? formData.location_id : null,
+            location_id: isService || !formData.location_id ? null : formData.location_id,
             category_id: formData.category_id ? formData.category_id : null,
+            uom: isService ? "servicio" : (formData.uom || "unidades"),
         };
 
         try {
@@ -324,7 +326,7 @@ export function ProductsPage() {
                                                 {product.name}
                                             </span>
                                             <span className="text-[11px] text-muted-foreground uppercase font-medium">
-                                                {product.uom}
+                                                {product.product_type === "SERVICE" ? "Servicio ⚙️" : product.uom}
                                             </span>
                                         </div>
                                     </td>
@@ -341,8 +343,10 @@ export function ProductsPage() {
                                         </div>
                                     </td>
                                     <td className="px-5 py-4">
-                                        {(!product.locations || product.locations.length === 0) ? (
-                                            <span className="text-[10px] text-muted-foreground italic">Sin asignar</span>
+                                        {product.product_type === "SERVICE" ? (
+                                            <span className="text-sm font-bold text-muted-foreground">-</span>
+                                        ) : (!product.locations || product.locations.length === 0) ? (
+                                            <span className="text-sm font-bold text-muted-foreground">-</span>
                                         ) : product.locations.length === 1 ? (
                                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 text-[10px] font-bold font-mono">
                                                 <MapPin size={10} />

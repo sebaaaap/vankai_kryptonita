@@ -136,21 +136,48 @@ class PurchaseService:
             for item in purchase.items:
                 product = self.db.query(Product).filter(Product.id == item.product_id).first()
                 if product:
+                    # --- REGLA: Las compras NUNCA deben ingresar stock a Pasillo Mermas ---
+                    # Obtenemos el ID de la ubicación de mermas (si existe) para excluirla
+                    from app.models.base import StorageLocation
+                    merma_loc = self.db.query(StorageLocation).filter(
+                        StorageLocation.name == "Pasillo Mermas"
+                    ).first()
+                    merma_loc_id = merma_loc.id if merma_loc else None
+
+                    target_product = product  # Por defecto usamos el producto del item
+
+                    # Si el producto referenciado está en Mermas, buscar otra instancia del mismo SKU
+                    if merma_loc_id and product.location_id == merma_loc_id:
+                        # Buscar el mismo producto (mismo barcode) en una ubicación que NO sea Mermas
+                        alt_product = self.db.query(Product).filter(
+                            Product.barcode == product.barcode,
+                            Product.location_id != merma_loc_id,
+                            Product.is_active == True
+                        ).first()
+
+                        if alt_product:
+                            # Usar la ubicación alternativa para recibir el stock de la compra
+                            target_product = alt_product
+                        # Si no hay alternativa, el stock se suma en el producto original
+                        # (edge case: producto que solo existe en Mermas, se deja igual)
+
                     # Capturar stock antes para trazabilidad
-                    stock_before = product.stock_quantity
-                    
-                    # Incrementar stock
-                    product.stock_quantity += item.quantity
-                    # Actualizar costo (último costo de adquisición)
-                    product.cost = item.unit_cost
-                    
-                    # Registrar item de movimiento
+                    stock_before = target_product.stock_quantity
+
+                    # Incrementar stock en la ubicación correcta (no Mermas)
+                    target_product.stock_quantity += item.quantity
+                    # Actualizar costo (último costo de adquisición) en ambos registros si aplica
+                    target_product.cost = item.unit_cost
+                    if target_product.id != product.id:
+                        product.cost = item.unit_cost  # Sincronizar costo también en registro de mermas
+
+                    # Registrar item de movimiento apuntando al producto correcto
                     inv_item = InventoryMovementItem(
                         movement_id=movement.id,
-                        product_id=product.id,
+                        product_id=target_product.id,
                         quantity=item.quantity,
                         stock_before=stock_before,
-                        stock_after=product.stock_quantity
+                        stock_after=target_product.stock_quantity
                     )
                     self.db.add(inv_item)
 

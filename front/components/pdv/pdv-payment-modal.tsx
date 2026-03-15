@@ -19,8 +19,10 @@ import {
   CheckCircle2,
   Receipt,
   Printer,
+  FileText,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
 
 const paymentIconMap: Record<string, LucideIcon> = {
   Banknote,
@@ -32,7 +34,7 @@ interface PdvPaymentModalProps {
   open: boolean
   onClose: () => void
   total: number
-  onConfirmPayment: (method: PaymentMethod, amountPaid: number) => void
+  onConfirmPayment: (method: PaymentMethod, amountPaid: number, documentType: string, comment: string) => void
 }
 
 export function PdvPaymentModal({
@@ -44,6 +46,8 @@ export function PdvPaymentModal({
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>(paymentMethods[0])
   const [amountInput, setAmountInput] = useState("")
   const [isPaid, setIsPaid] = useState(false)
+  const [documentType, setDocumentType] = useState<"boleta" | "factura">("boleta")
+  const [comment, setComment] = useState("")
 
   const amountPaid = amountInput ? Number.parseFloat(amountInput) : 0
   const change = Math.max(0, amountPaid - total)
@@ -60,10 +64,12 @@ export function PdvPaymentModal({
   const handleConfirm = () => {
     setIsPaid(true)
     setTimeout(() => {
-      onConfirmPayment(selectedMethod, amountPaid || total)
+      onConfirmPayment(selectedMethod, amountPaid || total, documentType, comment)
       setIsPaid(false)
       setAmountInput("")
       setSelectedMethod(paymentMethods[0])
+      setDocumentType("boleta")
+      setComment("")
     }, 2000)
   }
 
@@ -72,6 +78,8 @@ export function PdvPaymentModal({
       onClose()
       setAmountInput("")
       setSelectedMethod(paymentMethods[0])
+      setDocumentType("boleta")
+      setComment("")
     }
   }
 
@@ -169,6 +177,48 @@ export function PdvPaymentModal({
                   </button>
                 )
               })}
+            </div>
+
+            {/* Document Type */}
+            <div className="px-6 py-2 border-t border-border mt-2">
+               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Comprobante (Obligatorio)</p>
+               <div className="grid grid-cols-2 gap-2">
+                 <button
+                   type="button"
+                   onClick={() => setDocumentType("boleta")}
+                   className={`flex items-center justify-center gap-2 rounded-xl border py-2 text-xs font-semibold transition-all ${
+                     documentType === "boleta"
+                       ? "border-primary bg-primary/10 text-primary"
+                       : "border-border bg-card text-foreground hover:border-primary/30"
+                   }`}
+                 >
+                   <Receipt className="h-4 w-4" />
+                   Boleta
+                 </button>
+                 <button
+                   type="button"
+                   onClick={() => setDocumentType("factura")}
+                   className={`flex items-center justify-center gap-2 rounded-xl border py-2 text-xs font-semibold transition-all ${
+                     documentType === "factura"
+                       ? "border-primary bg-primary/10 text-primary"
+                       : "border-border bg-card text-foreground hover:border-primary/30"
+                   }`}
+                 >
+                   <FileText className="h-4 w-4" />
+                   Factura
+                 </button>
+               </div>
+            </div>
+
+            {/* Comment */}
+            <div className="px-6 py-2 mb-2">
+               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Comentario (Opcional)</p>
+               <Textarea
+                 placeholder="Ej: Factura solicitada, o comprobante de transferencia..."
+                 value={comment}
+                 onChange={(e) => setComment(e.target.value)}
+                 className="resize-none text-xs rounded-xl border-border bg-card focus-visible:ring-primary h-[60px]"
+               />
             </div>
 
             {/* Total Display */}

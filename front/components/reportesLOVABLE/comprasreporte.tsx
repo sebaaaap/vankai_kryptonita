@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
     ShoppingBag, TrendingUp, Truck, Package, Download, AlertCircle, FileText, BarChart3, ArrowRight
@@ -102,8 +102,17 @@ export default function PurchasesReport() {
         () => apiService.getReportPurchases(startDate, endDate)
     );
 
-    const handleDownload = () => {
-        toast.info("Exportando...", { description: "El reporte se descargará en breve." });
+    const [isExporting, setIsExporting] = useState(false);
+    const handleDownload = async () => {
+        try {
+            setIsExporting(true);
+            await apiService.exportPurchasesExcel(startDate || undefined, endDate || undefined);
+            toast.success("✅ Excel de compras generado");
+        } catch (e) {
+            toast.error("Error al exportar compras.");
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     if (isLoading || !data) {
@@ -164,9 +173,14 @@ export default function PurchasesReport() {
                                 <FileText size={16} />
                                 Últimos Movimientos
                             </h3>
-                            <Button size="sm" variant="outline" onClick={handleDownload}>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleDownload}
+                                disabled={isExporting}
+                            >
                                 <Download size={14} className="mr-2" />
-                                Excel
+                                {isExporting ? "Generando..." : "Excel"}
                             </Button>
                         </div>
                         <Table>

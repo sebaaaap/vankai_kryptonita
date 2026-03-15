@@ -190,7 +190,9 @@ class POSService:
                     total_amount=total,
                     payment_method="MIXED" if len(sale_data.payments) > 1 else sale_data.payments[0].payment_method.value,
                     session_id=sale_data.session_id,
-                    customer_id=getattr(sale_data, "customer_id", None)
+                    customer_id=getattr(sale_data, "customer_id", None),
+                    document_type=getattr(sale_data, "document_type", "boleta"),
+                    comment=getattr(sale_data, "comment", None)
                 )
                 db.add(ticket)
                 db.flush()
@@ -270,13 +272,16 @@ class POSService:
             session = db.query(CashSession).filter(CashSession.id == ticket.session_id).first()
             if session:
                 for payment in ticket.payments:
-                    pm_name = payment.payment_method.name if hasattr(payment.payment_method, "name") else str(payment.payment_method)
+                    # Usamos .name para obtener CASH, CARD, etc. o .value para efectivo, tarjeta
+                    pm_name = payment.payment_method.name if hasattr(payment.payment_method, "name") else str(payment.payment_method).upper()
                     
-                    if "CASH" in pm_name:
+                    if "CASH" in pm_name or "EFECTIVO" in pm_name.upper():
                         session.total_sales_cash += payment.amount
-                    elif "CARD" in pm_name:
+                        # Sincronizamos expected_balance (efectivo esperado)
+                        session.expected_balance = session.opening_balance + session.total_sales_cash
+                    elif "CARD" in pm_name or "TARJETA" in pm_name.upper():
                         session.total_sales_card += payment.amount
-                    elif "TRANSFER" in pm_name:
+                    elif "TRANSFER" in pm_name or "TRANSFERENCIA" in pm_name.upper():
                         session.total_sales_transfer += payment.amount
         
         db.commit()
@@ -466,6 +471,8 @@ class POSService:
                 main_method = original_ticket.payment_method
                 if main_method == "efectivo":
                     session.total_sales_cash += credit_note.total_amount
+                    # Re-sincronizar expected_balance
+                    session.expected_balance = session.opening_balance + session.total_sales_cash
                 elif main_method == "tarjeta":
                     session.total_sales_card += credit_note.total_amount
                 elif main_method == "transferencia":
@@ -473,6 +480,7 @@ class POSService:
                 else:
                     # Si es MIXTO, restamos del proporcional (simplificado al efectivo por ahora)
                     session.total_sales_cash += credit_note.total_amount
+                    session.expected_balance = session.opening_balance + session.total_sales_cash
 
         db.commit()
         db.refresh(credit_note)

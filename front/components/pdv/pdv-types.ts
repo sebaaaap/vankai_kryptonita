@@ -47,6 +47,8 @@ export interface Order {
   financialProgress?: number
   operationalProgress?: number
   workOrderState?: string
+  documentType?: string
+  comment?: string
 }
 
 export interface Customer {

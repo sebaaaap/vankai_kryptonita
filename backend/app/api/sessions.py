@@ -9,7 +9,7 @@ from app.schemas.sessions import (
     CashRegisterCreate, CashRegisterResponse
 )
 from app.services.session_service import SessionService
-from app.api.deps import check_roles
+from app.api.deps import check_roles, get_current_user
 
 router = APIRouter()
 
@@ -82,10 +82,12 @@ def close_session(
 @router.get("/active", response_model=Optional[CashSessionResponse])
 def get_active_session(
     user_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db_session)
+    db: Session = Depends(get_db_session),
+    current_user = Depends(get_current_user)
 ):
     """Obtiene la sesión abierta actual del usuario"""
-    session = SessionService.get_open_session(db, user_id)
+    target_user_id = user_id or current_user.username
+    session = SessionService.get_open_session(db, target_user_id)
     return session
 
 @router.get("/", response_model=List[CashSessionResponse])
