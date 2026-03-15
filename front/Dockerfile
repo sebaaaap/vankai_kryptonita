@@ -6,8 +6,9 @@ WORKDIR /app
 # Copiar configuración de dependencias
 COPY package.json package-lock.json* ./
 
-# Instalar dependencias
-RUN npm ci
+# Instalar dependencias usando npm install en lugar de ci para evitar problemas de matching de versiones
+# --legacy-peer-deps ayuda si hay conflictos de versiones de React entre librerías
+RUN npm install --legacy-peer-deps
 
 # Copiar el resto del código
 COPY . .
@@ -21,7 +22,7 @@ FROM nginx:alpine
 # Copiar los archivos estáticos desde la etapa anterior al directorio que nginx sirve
 COPY --from=builder /app/out /usr/share/nginx/html
 
-# Sobrescribir la configuración por defecto de nginx para que Next.js funcione bien con el enrutamiento y trailingSlash
+# Sobrescribir la configuración por defecto de nginx para que Next.js funcione bien con el enrutamiento
 RUN echo "server { \
     listen 80; \
     location / { \
