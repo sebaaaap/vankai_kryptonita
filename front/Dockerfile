@@ -6,37 +6,31 @@ WORKDIR /app
 # Copiar configuración de dependencias
 COPY package.json package-lock.json* ./
 
-# Instalar dependencias usando npm install en lugar de ci para evitar problemas de matching de versiones
-# --legacy-peer-deps ayuda si hay conflictos de versiones de React entre librerías
+# Instalar dependencias
 RUN npm install --legacy-peer-deps
 
 # Copiar el resto del código
 COPY . .
 
-# Recibir variable de entorno de build (pasada desde docker-compose)
-# NEXT_PUBLIC_* se compilan dentro del bundle, deben existir al momento del build
+# Recibir variable de entorno de build
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-# Construir el sitio estático (Next.js con output: "export")
+# Construir la aplicación en modo servidor (sin output: export)
 RUN npm run build
 
-# Etapa final: Servidor web ligero (Nginx)
-FROM nginx:alpine
+# Etapa final: Servidor Node.js de Next.js (más compatible con middleware y auth)
+FROM node:22-alpine AS runner
 
-# Copiar los archivos estáticos desde la etapa anterior al directorio que nginx sirve
-COPY --from=builder /app/out /usr/share/nginx/html
+WORKDIR /app
 
-# Sobrescribir la configuración por defecto de nginx para que Next.js funcione bien con el enrutamiento
-RUN echo "server { \
-    listen 80; \
-    location / { \
-        root /usr/share/nginx/html; \
-        index index.html index.htm; \
-        try_files \$uri \$uri/ /index.html; \
-    } \
-}" > /etc/nginx/conf.d/default.conf
+ENV NODE_ENV=production
 
-EXPOSE 80
+# Copiar solo lo necesario para correr en producción
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 
-CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 3000
+
+CMD ["node", "server.js"]

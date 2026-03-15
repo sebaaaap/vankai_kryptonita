@@ -1,12 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export', // Necesario para Tauri
-  trailingSlash: true, // Mejora la navegación en archivos locales
+  // 'standalone' genera un servidor Node.js optimizado para producción/Docker
+  output: 'standalone',
   typescript: {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: true, // Tauri no soporta optimización de imágenes en servidor
+    unoptimized: true,
   },
 }
 
