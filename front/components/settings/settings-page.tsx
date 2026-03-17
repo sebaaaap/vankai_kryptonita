@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from 'react';
-import { Settings as SettingsIcon, Building2, Palette, Users, ArrowLeft, ShieldCheck, ChevronRight } from 'lucide-react';
+import { Settings as SettingsIcon, Building2, Users, ArrowLeft, ShieldCheck, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BusinessInfo } from './business-info';
-import { Customization } from './customization';
+
 import { UserManagement } from './user-management';
 import { CashRegisterManagement } from './cash-register-management';
 import { useAuth } from '@/contexts/AuthContext';
@@ -65,19 +65,7 @@ export function SettingsPage() {
                                 {activeTab === 'business' && <ChevronRight size={14} />}
                             </button>
 
-                            <button
-                                onClick={() => setActiveTab('customization')}
-                                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${activeTab === 'customization'
-                                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
-                                    : 'text-muted-foreground hover:bg-muted font-medium'
-                                    }`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <Palette size={18} />
-                                    <span className="text-sm">Personalización</span>
-                                </div>
-                                {activeTab === 'customization' && <ChevronRight size={14} />}
-                            </button>
+
                         </nav>
 
                         {isAdmin && (
@@ -140,17 +128,7 @@ export function SettingsPage() {
                             </div>
                         )}
 
-                        {activeTab === 'customization' && (
-                            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                <div className="mb-8">
-                                    <h2 className="text-2xl font-bold text-foreground">Personalización</h2>
-                                    <p className="text-sm text-muted-foreground mt-1">Gestione la identidad visual de su sistema y reportes.</p>
-                                </div>
-                                <div className="bg-card rounded-2xl border border-border p-8 shadow-sm">
-                                    <Customization />
-                                </div>
-                            </div>
-                        )}
+
 
                         {activeTab === 'users' && (
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
