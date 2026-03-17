@@ -4,22 +4,46 @@ setlocal enabledelayedexpansion
 :: --- Correr en su propia carpeta ---
 cd /d "%~dp0"
 
-:: 1. Actualizar desde GitHub (silencioso, sin preguntar)
-git pull origin main >nul 2>&1
+echo ==============================================================
+echo        INICIANDO EL SISTEMA VANKAY (MODO INTELIGENTE)
+echo ==============================================================
 
-:: 2. Levantar Docker en segundo plano
-docker-compose up -d --build >nul 2>&1
+:: 1. Verificar actualizaciones de Git
+echo Verificando si hay cambios en la nube...
+git fetch origin main >nul 2>&1
+
+:: Comparamos la version local con la del servidor
+for /f %%i in ('git rev-parse HEAD') do set LOCAL=%%i
+for /f %%i in ('git rev-parse @{u}') do set REMOTE=%%i
+
+if "%LOCAL%"=="%REMOTE%" (
+    echo [OK] El sistema ya esta actualizado.
+    :: Solo levantamos (Super rapido)
+    docker-compose up -d >nul 2>&1
+) else (
+    echo [NUEVO] Se encontro una actualizacion. Descargando y aplicando...
+    git pull origin main >nul 2>&1
+    :: Forzamos el build porque hay cambios de codigo
+    docker-compose up -d --build >nul 2>&1
+)
 
 if %errorlevel% neq 0 (
-    msg * "Error al iniciar el sistema. Asegurese de que Docker Desktop este abierto (icono de la ballena en la barra de tareas) y luego intente de nuevo."
+    msg * "Error al iniciar el sistema. Asegurese de que Docker Desktop este abierto."
     exit /b 1
 )
 
-:: 3. Esperar a que los servicios esten listos
-timeout /t 8 /nobreak >nul
+:: 2. Esperar al puerto 3000 de forma inteligente
+echo Abriendo interfaz grafica...
+for /L %%i in (1,1,15) do (
+    powershell -Command "Test-NetConnection localhost -Port 3000" | find "TcpTestSucceeded : True" >nul
+    if !errorlevel! equ 0 (
+        goto :abrir_navegador
+    )
+    timeout /t 1 /nobreak >nul
+)
 
-:: 4. Abrir Chrome en pantalla completa en la pagina de login
-::    Probamos rutas comunes de Chrome en Windows
+:abrir_navegador
+:: 3. Abrir Chrome en pantalla completa
 set URL=http://localhost:3000/login
 
 set CHROME1="%ProgramFiles%\Google\Chrome\Application\chrome.exe"
@@ -39,7 +63,6 @@ if exist %CHROME3% (
     goto :fin
 )
 
-:: Si no tiene Chrome, abrir con navegador predeterminado (sin fullscreen)
 start %URL%
 
 :fin
